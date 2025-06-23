@@ -3,11 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Workshop } from '@/types';
+import WorkshopApplicationModal from './WorkshopApplicationModal';
 
 const WorkshopNotifications: React.FC = () => {
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedWorkshop, setSelectedWorkshop] = useState<Workshop | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchUpcomingWorkshops();
@@ -30,23 +33,21 @@ const WorkshopNotifications: React.FC = () => {
   };
 
   const handleApplyWorkshop = (workshop: Workshop) => {
-    const message = `Hi Amardeep! I'm interested in joining your workshop "${workshop.title}" scheduled for ${new Date(workshop.start_date).toLocaleDateString()}. 
+    setSelectedWorkshop(workshop);
+    setIsModalOpen(true);
+  };
 
-Workshop Details:
-- Title: ${workshop.title}
-- Date: ${new Date(workshop.start_date).toLocaleDateString()} at ${new Date(workshop.start_date).toLocaleTimeString()}
-- Duration: ${workshop.duration_display}
-- Price: ${workshop.price_display}
-- Spots Remaining: ${workshop.spots_remaining}
+  const handleApplicationSuccess = (applicationData: any) => {
+    // Refresh workshops to update participant count
+    fetchUpcomingWorkshops();
+    
+    // Show success message
+    console.log('Application successful:', applicationData);
+  };
 
-Please let me know the next steps to register and payment details if applicable.
-
-Thank you!`;
-
-    // Replace with actual WhatsApp number - using a placeholder for now
-    const whatsappNumber = '919876543210'; // Replace with actual number
-    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedWorkshop(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -218,9 +219,9 @@ Thank you!`;
                     ) : (
                       <>
                         <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        Apply via WhatsApp
+                        Apply Now
                       </>
                     )}
                   </button>
@@ -263,6 +264,16 @@ Thank you!`;
 
         </div>
       </div>
+
+      {/* Application Modal */}
+      {selectedWorkshop && (
+        <WorkshopApplicationModal
+          workshop={selectedWorkshop}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          onSuccess={handleApplicationSuccess}
+        />
+      )}
     </section>
   );
 };

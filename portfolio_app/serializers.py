@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Achievement, DigitalProduct, Subscriber, Newsletter, BlogPost, BlogCategory, BlogTag, Workshop
-
+from .models import (
+    Achievement, DigitalProduct, Subscriber, Newsletter, BlogPost, 
+    BlogCategory, BlogTag, Workshop, WorkshopApplication, Payment
+)
 from django.utils import timezone
 
 class UserSerializer(serializers.ModelSerializer):
@@ -152,3 +154,100 @@ class WorkshopSerializer(serializers.ModelSerializer):
 
     def get_is_completed(self, obj):
         return obj.is_completed
+
+# CRUD Serializers for comprehensive management
+
+class BlogPostCreateUpdateSerializer(serializers.ModelSerializer):
+    tags = serializers.PrimaryKeyRelatedField(many=True, queryset=BlogTag.objects.all(), required=False)
+    
+    class Meta:
+        model = BlogPost
+        fields = [
+            'title', 'slug', 'category', 'tags', 'excerpt', 'content', 
+            'featured_image', 'meta_title', 'meta_description', 'status', 
+            'publish_date', 'is_featured'
+        ]
+        extra_kwargs = {
+            'slug': {'required': False}
+        }
+
+class WorkshopCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Workshop
+        fields = [
+            'title', 'slug', 'description', 'short_description', 'featured_image',
+            'is_paid', 'price', 'currency', 'start_date', 'end_date', 'duration_hours',
+            'max_participants', 'status', 'is_featured', 'is_active', 'requirements',
+            'what_you_learn', 'meta_title', 'meta_description'
+        ]
+        extra_kwargs = {
+            'slug': {'required': False}
+        }
+
+class WorkshopApplicationSerializer(serializers.ModelSerializer):
+    workshop_title = serializers.CharField(source='workshop.title', read_only=True)
+    workshop_slug = serializers.CharField(source='workshop.slug', read_only=True)
+    payment_required = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = WorkshopApplication
+        fields = [
+            'id', 'name', 'email', 'phone', 'experience_level', 'motivation',
+            'status', 'payment_status', 'payment_amount', 'payment_id', 
+            'payment_method', 'paid_at', 'applied_at', 'workshop_title', 
+            'workshop_slug', 'payment_required'
+        ]
+        read_only_fields = [
+            'id', 'status', 'payment_status', 'payment_amount', 'payment_id',
+            'payment_method', 'paid_at', 'applied_at', 'workshop_title', 
+            'workshop_slug', 'payment_required'
+        ]
+    
+    def get_payment_required(self, obj):
+        return obj.workshop.is_paid if obj.workshop else False
+
+class PaymentSerializer(serializers.ModelSerializer):
+    workshop_title = serializers.CharField(source='workshop_application.workshop.title', read_only=True)
+    product_name = serializers.CharField(source='digital_product.name', read_only=True)
+    
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'payment_id', 'amount', 'currency', 'status', 'payment_type',
+            'customer_name', 'customer_email', 'customer_phone', 'gateway_payment_id',
+            'payment_method', 'created_at', 'updated_at', 'completed_at',
+            'workshop_title', 'product_name'
+        ]
+        read_only_fields = [
+            'id', 'payment_id', 'status', 'gateway_payment_id', 'payment_method',
+            'created_at', 'updated_at', 'completed_at', 'workshop_title', 'product_name'
+        ]
+
+# Enhanced serializers with image handling
+class AchievementCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Achievement
+        fields = ['title', 'description', 'date', 'metrics']
+
+class DigitalProductCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DigitalProduct
+        fields = ['name', 'description', 'price', 'download_link']
+
+class NewsletterCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Newsletter
+        fields = ['subject', 'content_html', 'content_text']
+
+class SubscriberCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subscriber
+        fields = ['email', 'name', 'is_active']
+        
+    def validate_email(self, value):
+        # Allow updating existing subscriber
+        if self.instance and self.instance.email == value:
+            return value
+        if Subscriber.objects.filter(email=value, is_active=True).exists():
+            raise serializers.ValidationError("This email is already subscribed.")
+        return value

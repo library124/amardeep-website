@@ -310,6 +310,16 @@ class WorkshopApplication(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
         ('waitlist', 'Waitlist'),
+        ('paid', 'Paid'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Payment Pending'),
+        ('completed', 'Payment Completed'),
+        ('failed', 'Payment Failed'),
+        ('refunded', 'Refunded'),
+        ('not_required', 'Not Required'),
     ]
 
     workshop = models.ForeignKey(Workshop, on_delete=models.CASCADE, related_name='applications')
@@ -331,6 +341,15 @@ class WorkshopApplication(models.Model):
         help_text="Why do you want to join this workshop? (optional)"
     )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    
+    # Payment fields
+    payment_status = models.CharField(max_length=15, choices=PAYMENT_STATUS_CHOICES, default='not_required')
+    payment_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    payment_id = models.CharField(max_length=100, blank=True, help_text="Payment gateway transaction ID")
+    payment_method = models.CharField(max_length=50, blank=True, help_text="Payment method used")
+    paid_at = models.DateTimeField(null=True, blank=True)
+    
+    # Timestamps
     applied_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     notes = models.TextField(blank=True, help_text="Admin notes")
@@ -341,6 +360,7 @@ class WorkshopApplication(models.Model):
         indexes = [
             models.Index(fields=['-applied_at']),
             models.Index(fields=['status']),
+            models.Index(fields=['payment_status']),
             models.Index(fields=['workshop', 'status']),
         ]
 
@@ -348,13 +368,101 @@ class WorkshopApplication(models.Model):
         return f"{self.name} - {self.workshop.title} ({self.get_status_display()})"
 
     def save(self, *args, **kwargs):
-        # Auto-approve if workshop has available spots and is not full
-        if self.status == 'pending' and not self.workshop.is_full:
-            self.status = 'approved'
-            # Increment registered count
-            self.workshop.registered_count += 1
-            self.workshop.save(update_fields=['registered_count'])
-        elif self.status == 'pending' and self.workshop.is_full:
-            self.status = 'waitlist'
+        # Set payment status based on workshop type
+        if self.workshop.is_paid and self.payment_status == 'not_required':
+            self.payment_status = 'pending'
+            self.payment_amount = self.workshop.price
+        elif not self.workshop.is_paid:
+            self.payment_status = 'not_required'
+            self.payment_amount = 0
+        
+        # Auto-approve free workshops or paid workshops with completed payment
+        if (not self.workshop.is_paid or self.payment_status == 'completed') and self.status == 'pending':
+            if not self.workshop.is_full:
+                self.status = 'approved'
+                # Increment registered count
+                self.workshop.registered_count += 1
+                self.workshop.save(update_fields=['registered_count'])
+            else:
+                self.status = 'waitlist'
         
         super().save(*args, **kwargs)
+
+    def mark_payment_completed(self, payment_id, payment_method):
+        """Mark payment as completed"""
+        self.payment_status = 'completed'
+        self.payment_id = payment_id
+        self.payment_method = payment_method
+        self.paid_at = timezone.now()
+        if self.status == 'pending' and not self.workshop.is_full:
+            self.status = 'approved'
+            self.workshop.registered_count += 1
+            self.workshop.save(update_fields=['registered_count'])
+        self.save()
+
+class Payment(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+        ('refunded', 'Refunded'),
+    ]
+
+    PAYMENT_TYPE_CHOICES = [
+        ('workshop', 'Workshop'),
+        ('product', 'Digital Product'),
+        ('subscription', 'Subscription'),
+    ]
+
+    # Payment details
+    payment_id = models.CharField(max_length=100, unique=True, help_text="Unique payment identifier")
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default='INR')
+    status = models.CharField(max_length=10, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    payment_type = models.CharField(max_length=15, choices=PAYMENT_TYPE_CHOICES)
+    
+    # Customer details
+    customer_name = models.CharField(max_length=100)
+    customer_email = models.EmailField()
+    customer_phone = models.CharField(max_length=20, blank=True)
+    
+    # Payment gateway details
+    gateway_payment_id = models.CharField(max_length=100, blank=True)
+    payment_method = models.CharField(max_length=50, blank=True)
+    gateway_response = models.JSONField(default=dict, blank=True)
+    
+    # Related objects
+    workshop_application = models.ForeignKey(WorkshopApplication, on_delete=models.SET_NULL, null=True, blank=True)
+    digital_product = models.ForeignKey(DigitalProduct, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['payment_type']),
+            models.Index(fields=['customer_email']),
+        ]
+
+    def __str__(self):
+        return f"Payment {self.payment_id} - {self.customer_name} ({self.get_status_display()})"
+
+    def mark_completed(self, gateway_payment_id, payment_method, gateway_response=None):
+        """Mark payment as completed"""
+        self.status = 'completed'
+        self.gateway_payment_id = gateway_payment_id
+        self.payment_method = payment_method
+        self.completed_at = timezone.now()
+        if gateway_response:
+            self.gateway_response = gateway_response
+        self.save()
+
+        # Update related application if exists
+        if self.workshop_application:
+            self.workshop_application.mark_payment_completed(gateway_payment_id, payment_method)
