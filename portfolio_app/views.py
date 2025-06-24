@@ -1,7 +1,7 @@
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -11,6 +11,11 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 import uuid
 from .services.brevo_service import brevo_service
+from database.services import UserService, ContentService, WorkshopService, ProductService, PaymentService
+from database.django_integration import db_manager
+import logging
+
+logger = logging.getLogger(__name__)
 from .models import (
     Achievement, DigitalProduct, Subscriber, Newsletter, BlogPost, 
     BlogCategory, BlogTag, Workshop, WorkshopApplication, Payment,
@@ -720,166 +725,166 @@ class ServiceBookingViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(email=email)
         
         return queryset
- 
- #   C o n t a c t   V i e w s  
- f r o m   r e s t _ f r a m e w o r k   i m p o r t   g e n e r i c s ,   p e r m i s s i o n s ,   s t a t u s ,   v i e w s e t s  
- f r o m   r e s t _ f r a m e w o r k . r e s p o n s e   i m p o r t   R e s p o n s e  
- f r o m   r e s t _ f r a m e w o r k . v i e w s   i m p o r t   A P I V i e w  
- f r o m   r e s t _ f r a m e w o r k . d e c o r a t o r s   i m p o r t   a c t i o n  
- f r o m   . m o d e l s   i m p o r t   C o n t a c t M e s s a g e  
- f r o m   . s e r i a l i z e r s   i m p o r t   (  
-         C o n t a c t M e s s a g e S e r i a l i z e r ,   C o n t a c t M e s s a g e C r e a t e S e r i a l i z e r ,  
-         C o n t a c t M e s s a g e U p d a t e S e r i a l i z e r  
- )  
- f r o m   . s e r v i c e s . b r e v o _ s e r v i c e   i m p o r t   b r e v o _ s e r v i c e  
-  
- #   C o n t a c t   V i e w s  
-  
- c l a s s   C o n t a c t M e s s a g e C r e a t e V i e w ( A P I V i e w ) :  
-         p e r m i s s i o n _ c l a s s e s   =   ( p e r m i s s i o n s . A l l o w A n y , )  
-  
-         d e f   p o s t ( s e l f ,   r e q u e s t ) :  
-                 s e r i a l i z e r   =   C o n t a c t M e s s a g e C r e a t e S e r i a l i z e r ( d a t a = r e q u e s t . d a t a )  
-                 i f   s e r i a l i z e r . i s _ v a l i d ( ) :  
-                         #   G e t   c l i e n t   I P   a n d   u s e r   a g e n t  
-                         i p _ a d d r e s s   =   s e l f . g e t _ c l i e n t _ i p ( r e q u e s t )  
-                         u s e r _ a g e n t   =   r e q u e s t . M E T A . g e t ( ' H T T P _ U S E R _ A G E N T ' ,   ' ' )  
-                          
-                         c o n t a c t _ m e s s a g e   =   s e r i a l i z e r . s a v e (  
-                                 i p _ a d d r e s s = i p _ a d d r e s s ,  
-                                 u s e r _ a g e n t = u s e r _ a g e n t  
-                         )  
-                          
-                         #   S e n d   n o t i f i c a t i o n   e m a i l s   u s i n g   B r e v o  
-                         t r y :  
-                                 #   S e n d   n o t i f i c a t i o n   t o   a d m i n  
-                                 a d m i n _ e m a i l _ s e n t   =   b r e v o _ s e r v i c e . s e n d _ c o n t a c t _ n o t i f i c a t i o n ( c o n t a c t _ m e s s a g e )  
-                                  
-                                 #   S e n d   c o n f i r m a t i o n   t o   c u s t o m e r  
-                                 c u s t o m e r _ e m a i l _ s e n t   =   b r e v o _ s e r v i c e . s e n d _ c o n t a c t _ c o n f i r m a t i o n ( c o n t a c t _ m e s s a g e )  
-                                  
-                                 i f   n o t   a d m i n _ e m a i l _ s e n t :  
-                                         p r i n t ( f " F a i l e d   t o   s e n d   a d m i n   n o t i f i c a t i o n   f o r   c o n t a c t   m e s s a g e   { c o n t a c t _ m e s s a g e . i d } " )  
-                                 i f   n o t   c u s t o m e r _ e m a i l _ s e n t :  
-                                         p r i n t ( f " F a i l e d   t o   s e n d   c u s t o m e r   c o n f i r m a t i o n   f o r   c o n t a c t   m e s s a g e   { c o n t a c t _ m e s s a g e . i d } " )  
-                                          
-                         e x c e p t   E x c e p t i o n   a s   e :  
-                                 p r i n t ( f " F a i l e d   t o   s e n d   c o n t a c t   e m a i l s :   { e } " )  
-                          
-                         r e t u r n   R e s p o n s e ( {  
-                                 ' m e s s a g e ' :   ' T h a n k   y o u   f o r   y o u r   m e s s a g e !   I \ ' l l   g e t   b a c k   t o   y o u   s o o n . ' ,  
-                                 ' c o n t a c t _ i d ' :   c o n t a c t _ m e s s a g e . i d  
-                         } ,   s t a t u s = s t a t u s . H T T P _ 2 0 1 _ C R E A T E D )  
-                  
-                 r e t u r n   R e s p o n s e ( s e r i a l i z e r . e r r o r s ,   s t a t u s = s t a t u s . H T T P _ 4 0 0 _ B A D _ R E Q U E S T )  
-          
-         d e f   g e t _ c l i e n t _ i p ( s e l f ,   r e q u e s t ) :  
-                 " " " G e t   t h e   c l i e n t ' s   I P   a d d r e s s " " "  
-                 x _ f o r w a r d e d _ f o r   =   r e q u e s t . M E T A . g e t ( ' H T T P _ X _ F O R W A R D E D _ F O R ' )  
-                 i f   x _ f o r w a r d e d _ f o r :  
-                         i p   =   x _ f o r w a r d e d _ f o r . s p l i t ( ' , ' ) [ 0 ]  
-                 e l s e :  
-                         i p   =   r e q u e s t . M E T A . g e t ( ' R E M O T E _ A D D R ' )  
-                 r e t u r n   i p  
-  
- c l a s s   C o n t a c t M e s s a g e V i e w S e t ( v i e w s e t s . M o d e l V i e w S e t ) :  
-         q u e r y s e t   =   C o n t a c t M e s s a g e . o b j e c t s . a l l ( )  
-         p e r m i s s i o n _ c l a s s e s   =   [ p e r m i s s i o n s . I s A u t h e n t i c a t e d O r R e a d O n l y ]  
-          
-         d e f   g e t _ s e r i a l i z e r _ c l a s s ( s e l f ) :  
-                 i f   s e l f . a c t i o n   = =   ' c r e a t e ' :  
-                         r e t u r n   C o n t a c t M e s s a g e C r e a t e S e r i a l i z e r  
-                 e l i f   s e l f . a c t i o n   i n   [ ' u p d a t e ' ,   ' p a r t i a l _ u p d a t e ' ] :  
-                         r e t u r n   C o n t a c t M e s s a g e U p d a t e S e r i a l i z e r  
-                 r e t u r n   C o n t a c t M e s s a g e S e r i a l i z e r  
-          
-         d e f   g e t _ q u e r y s e t ( s e l f ) :  
-                 q u e r y s e t   =   C o n t a c t M e s s a g e . o b j e c t s . a l l ( ) . s e l e c t _ r e l a t e d ( ' a s s i g n e d _ t o ' )  
-                  
-                 #   O n l y   a l l o w   a u t h e n t i c a t e d   u s e r s   t o   s e e   a l l   m e s s a g e s  
-                 i f   n o t   s e l f . r e q u e s t . u s e r . i s _ a u t h e n t i c a t e d :  
-                         #   F o r   u n a u t h e n t i c a t e d   u s e r s ,   o n l y   a l l o w   c r e a t i n g   m e s s a g e s  
-                         r e t u r n   C o n t a c t M e s s a g e . o b j e c t s . n o n e ( )  
-                  
-                 r e t u r n   q u e r y s e t . o r d e r _ b y ( ' - c r e a t e d _ a t ' )  
-          
-         d e f   c r e a t e ( s e l f ,   r e q u e s t ,   * a r g s ,   * * k w a r g s ) :  
-                 #   A l l o w   u n a u t h e n t i c a t e d   u s e r s   t o   c r e a t e   c o n t a c t   m e s s a g e s  
-                 s e r i a l i z e r   =   s e l f . g e t _ s e r i a l i z e r ( d a t a = r e q u e s t . d a t a )  
-                 s e r i a l i z e r . i s _ v a l i d ( r a i s e _ e x c e p t i o n = T r u e )  
-                  
-                 #   G e t   c l i e n t   I P   a n d   u s e r   a g e n t  
-                 i p _ a d d r e s s   =   s e l f . g e t _ c l i e n t _ i p ( r e q u e s t )  
-                 u s e r _ a g e n t   =   r e q u e s t . M E T A . g e t ( ' H T T P _ U S E R _ A G E N T ' ,   ' ' )  
-                  
-                 c o n t a c t _ m e s s a g e   =   s e r i a l i z e r . s a v e (  
-                         i p _ a d d r e s s = i p _ a d d r e s s ,  
-                         u s e r _ a g e n t = u s e r _ a g e n t  
-                 )  
-                  
-                 #   S e n d   n o t i f i c a t i o n   e m a i l s  
-                 t r y :  
-                         a d m i n _ e m a i l _ s e n t   =   b r e v o _ s e r v i c e . s e n d _ c o n t a c t _ n o t i f i c a t i o n ( c o n t a c t _ m e s s a g e )  
-                         c u s t o m e r _ e m a i l _ s e n t   =   b r e v o _ s e r v i c e . s e n d _ c o n t a c t _ c o n f i r m a t i o n ( c o n t a c t _ m e s s a g e )  
-                          
-                         i f   n o t   a d m i n _ e m a i l _ s e n t :  
-                                 p r i n t ( f " F a i l e d   t o   s e n d   a d m i n   n o t i f i c a t i o n   f o r   c o n t a c t   m e s s a g e   { c o n t a c t _ m e s s a g e . i d } " )  
-                         i f   n o t   c u s t o m e r _ e m a i l _ s e n t :  
-                                 p r i n t ( f " F a i l e d   t o   s e n d   c u s t o m e r   c o n f i r m a t i o n   f o r   c o n t a c t   m e s s a g e   { c o n t a c t _ m e s s a g e . i d } " )  
-                                  
-                 e x c e p t   E x c e p t i o n   a s   e :  
-                         p r i n t ( f " F a i l e d   t o   s e n d   c o n t a c t   e m a i l s :   { e } " )  
-                  
-                 h e a d e r s   =   s e l f . g e t _ s u c c e s s _ h e a d e r s ( s e r i a l i z e r . d a t a )  
-                 r e t u r n   R e s p o n s e ( {  
-                         ' m e s s a g e ' :   ' T h a n k   y o u   f o r   y o u r   m e s s a g e !   I \ ' l l   g e t   b a c k   t o   y o u   s o o n . ' ,  
-                         ' c o n t a c t _ i d ' :   c o n t a c t _ m e s s a g e . i d  
-                 } ,   s t a t u s = s t a t u s . H T T P _ 2 0 1 _ C R E A T E D ,   h e a d e r s = h e a d e r s )  
-          
-         d e f   r e t r i e v e ( s e l f ,   r e q u e s t ,   * a r g s ,   * * k w a r g s ) :  
-                 i n s t a n c e   =   s e l f . g e t _ o b j e c t ( )  
-                 #   M a r k   a s   r e a d   i f   i t ' s   n e w   a n d   u s e r   i s   a u t h e n t i c a t e d  
-                 i f   i n s t a n c e . i s _ n e w   a n d   r e q u e s t . u s e r . i s _ a u t h e n t i c a t e d :  
-                         i n s t a n c e . m a r k _ a s _ r e a d ( r e q u e s t . u s e r )  
-                 s e r i a l i z e r   =   s e l f . g e t _ s e r i a l i z e r ( i n s t a n c e )  
-                 r e t u r n   R e s p o n s e ( s e r i a l i z e r . d a t a )  
-          
-         d e f   g e t _ c l i e n t _ i p ( s e l f ,   r e q u e s t ) :  
-                 " " " G e t   t h e   c l i e n t ' s   I P   a d d r e s s " " "  
-                 x _ f o r w a r d e d _ f o r   =   r e q u e s t . M E T A . g e t ( ' H T T P _ X _ F O R W A R D E D _ F O R ' )  
-                 i f   x _ f o r w a r d e d _ f o r :  
-                         i p   =   x _ f o r w a r d e d _ f o r . s p l i t ( ' , ' ) [ 0 ]  
-                 e l s e :  
-                         i p   =   r e q u e s t . M E T A . g e t ( ' R E M O T E _ A D D R ' )  
-                 r e t u r n   i p  
-          
-         @ a c t i o n ( d e t a i l = T r u e ,   m e t h o d s = [ ' p o s t ' ] ,   p e r m i s s i o n _ c l a s s e s = [ p e r m i s s i o n s . I s A u t h e n t i c a t e d ] )  
-         d e f   m a r k _ r e a d ( s e l f ,   r e q u e s t ,   p k = N o n e ) :  
-                 " " " M a r k   m e s s a g e   a s   r e a d " " "  
-                 m e s s a g e   =   s e l f . g e t _ o b j e c t ( )  
-                 m e s s a g e . m a r k _ a s _ r e a d ( r e q u e s t . u s e r )  
-                 r e t u r n   R e s p o n s e ( { ' m e s s a g e ' :   ' M e s s a g e   m a r k e d   a s   r e a d ' } )  
-          
-         @ a c t i o n ( d e t a i l = T r u e ,   m e t h o d s = [ ' p o s t ' ] ,   p e r m i s s i o n _ c l a s s e s = [ p e r m i s s i o n s . I s A u t h e n t i c a t e d ] )  
-         d e f   m a r k _ r e p l i e d ( s e l f ,   r e q u e s t ,   p k = N o n e ) :  
-                 " " " M a r k   m e s s a g e   a s   r e p l i e d " " "  
-                 m e s s a g e   =   s e l f . g e t _ o b j e c t ( )  
-                 m e s s a g e . m a r k _ a s _ r e p l i e d ( )  
-                 r e t u r n   R e s p o n s e ( { ' m e s s a g e ' :   ' M e s s a g e   m a r k e d   a s   r e p l i e d ' } )  
-          
-         @ a c t i o n ( d e t a i l = F a l s e ,   m e t h o d s = [ ' g e t ' ] ,   p e r m i s s i o n _ c l a s s e s = [ p e r m i s s i o n s . I s A u t h e n t i c a t e d ] )  
-         d e f   s t a t s ( s e l f ,   r e q u e s t ) :  
-                 " " " G e t   c o n t a c t   m e s s a g e   s t a t i s t i c s " " "  
-                 t o t a l   =   C o n t a c t M e s s a g e . o b j e c t s . c o u n t ( )  
-                 n e w   =   C o n t a c t M e s s a g e . o b j e c t s . f i l t e r ( s t a t u s = ' n e w ' ) . c o u n t ( )  
-                 u r g e n t   =   C o n t a c t M e s s a g e . o b j e c t s . f i l t e r ( p r i o r i t y _ _ i n = [ ' h i g h ' ,   ' u r g e n t ' ] ) . c o u n t ( )  
-                 r e p l i e d   =   C o n t a c t M e s s a g e . o b j e c t s . f i l t e r ( s t a t u s = ' r e p l i e d ' ) . c o u n t ( )  
-                  
-                 r e t u r n   R e s p o n s e ( {  
-                         ' t o t a l ' :   t o t a l ,  
-                         ' n e w ' :   n e w ,  
-                         ' u r g e n t ' :   u r g e n t ,  
-                         ' r e p l i e d ' :   r e p l i e d ,  
-                         ' r e s p o n s e _ r a t e ' :   r o u n d ( ( r e p l i e d   /   t o t a l   *   1 0 0 )   i f   t o t a l   >   0   e l s e   0 ,   1 )  
-                 } )  
- 
+
+# Contact Views
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.decorators import action
+from .models import ContactMessage
+from .serializers import (
+    ContactMessageSerializer, ContactMessageCreateSerializer,
+    ContactMessageUpdateSerializer
+)
+from .services.brevo_service import brevo_service
+
+# Contact Views
+
+class ContactMessageCreateView(APIView):
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        serializer = ContactMessageCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            # Get client IP and user agent
+            ip_address = self.get_client_ip(request)
+            user_agent = request.META.get('HTTP_USER_AGENT', '')
+            
+            contact_message = serializer.save(
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            
+            # Send notification emails using Brevo
+            try:
+                # Send notification to admin
+                admin_email_sent = brevo_service.send_contact_notification(contact_message)
+                
+                # Send confirmation to customer
+                customer_email_sent = brevo_service.send_contact_confirmation(contact_message)
+                
+                if not admin_email_sent:
+                    print(f"Failed to send admin notification for contact message {contact_message.id}")
+                if not customer_email_sent:
+                    print(f"Failed to send customer confirmation for contact message {contact_message.id}")
+                    
+            except Exception as e:
+                print(f"Failed to send contact emails: {e}")
+            
+            return Response({
+                'message': 'Thank you for your message! I\'ll get back to you soon.',
+                'contact_id': contact_message.id
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def get_client_ip(self, request):
+        """Get the client's IP address"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
+class ContactMessageViewSet(viewsets.ModelViewSet):
+    queryset = ContactMessage.objects.all()
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ContactMessageCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return ContactMessageUpdateSerializer
+        return ContactMessageSerializer
+    
+    def get_queryset(self):
+        queryset = ContactMessage.objects.all().select_related('assigned_to')
+        
+        # Only allow authenticated users to see all messages
+        if not self.request.user.is_authenticated:
+            # For unauthenticated users, only allow creating messages
+            return ContactMessage.objects.none()
+        
+        return queryset.order_by('-created_at')
+    
+    def create(self, request, *args, **kwargs):
+        # Allow unauthenticated users to create contact messages
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Get client IP and user agent
+        ip_address = self.get_client_ip(request)
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        
+        contact_message = serializer.save(
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
+        # Send notification emails
+        try:
+            admin_email_sent = brevo_service.send_contact_notification(contact_message)
+            customer_email_sent = brevo_service.send_contact_confirmation(contact_message)
+            
+            if not admin_email_sent:
+                print(f"Failed to send admin notification for contact message {contact_message.id}")
+            if not customer_email_sent:
+                print(f"Failed to send customer confirmation for contact message {contact_message.id}")
+                
+        except Exception as e:
+            print(f"Failed to send contact emails: {e}")
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response({
+            'message': 'Thank you for your message! I\'ll get back to you soon.',
+            'contact_id': contact_message.id
+        }, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Mark as read if it's new and user is authenticated
+        if instance.is_new and request.user.is_authenticated:
+            instance.mark_as_read(request.user)
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def get_client_ip(self, request):
+        """Get the client's IP address"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def mark_read(self, request, pk=None):
+        """Mark message as read"""
+        message = self.get_object()
+        message.mark_as_read(request.user)
+        return Response({'message': 'Message marked as read'})
+    
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def mark_replied(self, request, pk=None):
+        """Mark message as replied"""
+        message = self.get_object()
+        message.mark_as_replied()
+        return Response({'message': 'Message marked as replied'})
+    
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def stats(self, request):
+        """Get contact message statistics"""
+        total = ContactMessage.objects.count()
+        new = ContactMessage.objects.filter(status='new').count()
+        urgent = ContactMessage.objects.filter(priority__in=['high', 'urgent']).count()
+        replied = ContactMessage.objects.filter(status='replied').count()
+        
+        return Response({
+            'total': total,
+            'new': new,
+            'urgent': urgent,
+            'replied': replied,
+            'response_rate': round((replied / total * 100) if total > 0 else 0, 1)
+        })
+

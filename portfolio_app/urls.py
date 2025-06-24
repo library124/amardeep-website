@@ -48,6 +48,17 @@ from .views import (
     ServiceBookingViewSet,
 )
 
+# SQLAlchemy Views
+from .sqlalchemy_views import (
+    database_health_check,
+    initialize_tidb_database,
+    WorkshopListSQLAlchemyView,
+    BlogPostListSQLAlchemyView,
+    TradingServiceListSQLAlchemyView,
+    user_dashboard_sqlalchemy,
+    sqlalchemy_demo_data,
+)
+
 # App namespace for URL reversing
 app_name = 'portfolio_app'
 
@@ -115,4 +126,13 @@ urlpatterns = [
     path('services/featured/', FeaturedServicesView.as_view(), name='service-featured'),
     path('services/<slug:slug>/', TradingServiceDetailView.as_view(), name='service-detail'),
     path('services/book/', ServiceBookingCreateView.as_view(), name='service-booking-create'),
+    
+    # SQLAlchemy + TiDB Cloud URLs
+    path('tidb/health/', database_health_check, name='tidb-health-check'),
+    path('tidb/initialize/', initialize_tidb_database, name='tidb-initialize'),
+    path('tidb/workshops/', WorkshopListSQLAlchemyView.as_view(), name='workshops-sqlalchemy'),
+    path('tidb/blog/', BlogPostListSQLAlchemyView.as_view(), name='blog-sqlalchemy'),
+    path('tidb/services/', TradingServiceListSQLAlchemyView.as_view(), name='services-sqlalchemy'),
+    path('tidb/dashboard/', user_dashboard_sqlalchemy, name='dashboard-sqlalchemy'),
+    path('tidb/demo/', sqlalchemy_demo_data, name='sqlalchemy-demo'),
 ]
