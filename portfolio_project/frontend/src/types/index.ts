@@ -2,7 +2,60 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  // Add other user fields as needed
+  first_name: string;
+  last_name: string;
+  date_joined: string;
+  profile?: UserProfile;
+}
+
+export interface UserProfile {
+  phone: string;
+  date_of_birth: string;
+  bio: string;
+  profile_picture: string;
+  trading_experience: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  preferred_market: 'equity' | 'options' | 'futures' | 'forex' | 'crypto';
+  
+  email_notifications: boolean;
+  sms_notifications: boolean;
+  full_name: string;
+  display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchasedCourse {
+  id: number;
+  course_name: string;
+  course_type: 'workshop' | 'mentorship' | 'signals' | 'course';
+  description: string;
+  purchase_date: string;
+  start_date: string;
+  end_date: string;
+  status: 'active' | 'completed' | 'expired' | 'cancelled';
+  amount_paid: number;
+  currency: string;
+  price_display: string;
+  access_url: string;
+  progress_percentage: number;
+  last_accessed: string;
+  is_active: boolean;
+  days_remaining: number;
+  created_at: string;
+}
+
+export interface DashboardData {
+  user: User;
+  profile: UserProfile;
+  purchased_courses: PurchasedCourse[];
+  courses_count: number;
+  active_courses_count: number;
+}
+
+export interface ChangePasswordData {
+  old_password: string;
+  new_password: string;
+  confirm_password: string;
 }
 
 export interface AuthResponse {

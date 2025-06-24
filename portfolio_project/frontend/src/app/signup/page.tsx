@@ -53,7 +53,7 @@ const SignupPage: React.FC = () => {
       const response = await api.post('/auth/register/', { username, email, password });
       // After successful registration, automatically log the user in
       const loginResponse = await api.post('/auth/login/', { email, password });
-      login(loginResponse.data.token);
+      login(loginResponse.data.token, loginResponse.data.user);
     } catch (err: any) {
       setError(err.response?.data?.detail || err.response?.data?.username?.[0] || err.response?.data?.email?.[0] || 'Signup failed. Please try again.');
     } finally {

@@ -3,7 +3,156 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.urls import reverse
 from django.utils.text import slugify
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 import uuid
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    phone = models.CharField(max_length=20, blank=True, help_text="Phone number")
+    date_of_birth = models.DateField(null=True, blank=True, help_text="Date of birth")
+    bio = models.TextField(blank=True, help_text="Short bio")
+    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+    
+    # Trading preferences
+    trading_experience = models.CharField(
+        max_length=20,
+        choices=[
+            ('beginner', 'Beginner'),
+            ('intermediate', 'Intermediate'),
+            ('advanced', 'Advanced'),
+            ('expert', 'Expert'),
+        ],
+        default='beginner',
+        help_text="Trading experience level"
+    )
+    preferred_market = models.CharField(
+        max_length=50,
+        choices=[
+            ('equity', 'Equity'),
+            ('options', 'Options'),
+            ('futures', 'Futures'),
+            ('forex', 'Forex'),
+            ('crypto', 'Cryptocurrency'),
+        ],
+        blank=True,
+        help_text="Preferred trading market"
+    )
+    
+    # Subscription and preferences
+    newsletter_subscribed = models.BooleanField(default=False, help_text="Subscribed to newsletter")
+    email_notifications = models.BooleanField(default=True, help_text="Receive email notifications")
+    sms_notifications = models.BooleanField(default=False, help_text="Receive SMS notifications")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User Profile"
+        verbose_name_plural = "User Profiles"
+
+    def __str__(self):
+        return f"{self.user.get_full_name() or self.user.username}'s Profile"
+
+    @property
+    def full_name(self):
+        return self.user.get_full_name() or self.user.username
+
+    @property
+    def display_name(self):
+        if self.user.first_name:
+            return self.user.first_name
+        return self.user.username
+
+class PurchasedCourse(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='purchased_courses')
+    course_name = models.CharField(max_length=255, help_text="Name of the purchased course")
+    course_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('workshop', 'Workshop'),
+            ('mentorship', 'Mentorship'),
+            ('signals', 'Trading Signals'),
+            ('course', 'Online Course'),
+        ],
+        help_text="Type of course"
+    )
+    description = models.TextField(blank=True, help_text="Course description")
+    
+    # Purchase details
+    purchase_date = models.DateTimeField(auto_now_add=True)
+    start_date = models.DateTimeField(help_text="Course start date")
+    end_date = models.DateTimeField(null=True, blank=True, help_text="Course end date")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    
+    # Pricing
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, help_text="Amount paid for the course")
+    currency = models.CharField(max_length=3, default='INR')
+    
+    # Access details
+    access_url = models.URLField(blank=True, help_text="URL to access the course")
+    access_credentials = models.JSONField(default=dict, blank=True, help_text="Login credentials or access details")
+    
+    # Progress tracking
+    progress_percentage = models.PositiveIntegerField(default=0, help_text="Course completion percentage")
+    last_accessed = models.DateTimeField(null=True, blank=True, help_text="Last time user accessed the course")
+    
+    # Related objects
+    workshop_application = models.ForeignKey('WorkshopApplication', on_delete=models.SET_NULL, null=True, blank=True)
+    trading_service = models.ForeignKey('TradingService', on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-purchase_date']
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['-purchase_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.course_name}"
+
+    @property
+    def is_active(self):
+        return self.status == 'active' and (not self.end_date or self.end_date > timezone.now())
+
+    @property
+    def days_remaining(self):
+        if self.end_date and self.is_active:
+            delta = self.end_date - timezone.now()
+            return max(0, delta.days)
+        return None
+
+    @property
+    def price_display(self):
+        return f"{self.currency} {self.amount_paid:,.0f}"
+
+    def mark_accessed(self):
+        """Mark the course as accessed"""
+        self.last_accessed = timezone.now()
+        self.save(update_fields=['last_accessed'])
+
+# Signal to create UserProfile when User is created
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance)
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    if hasattr(instance, 'profile'):
+        instance.profile.save()
 
 class Achievement(models.Model):
     title = models.CharField(max_length=255)
@@ -86,7 +235,7 @@ class BlogCategory(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse('blog_category', kwargs={'slug': self.slug})
+        return reverse('portfolio_app:blog_category', kwargs={'slug': self.slug})
 
 class BlogTag(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -105,7 +254,7 @@ class BlogTag(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse('blog_tag', kwargs={'slug': self.slug})
+        return reverse('portfolio_app:blog_tag', kwargs={'slug': self.slug})
 
 class BlogPost(models.Model):
     STATUS_CHOICES = [
@@ -160,7 +309,7 @@ class BlogPost(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse('blog_post_detail', kwargs={'slug': self.slug})
+        return reverse('portfolio_app:blog-post-detail', kwargs={'slug': self.slug})
 
     @property
     def is_published(self):
@@ -263,7 +412,7 @@ class Workshop(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse('workshop_detail', kwargs={'slug': self.slug})
+        return reverse('portfolio_app:workshop-detail', kwargs={'slug': self.slug})
 
     @property
     def is_upcoming(self):
@@ -400,6 +549,159 @@ class WorkshopApplication(models.Model):
             self.workshop.save(update_fields=['registered_count'])
         self.save()
 
+class TradingService(models.Model):
+    SERVICE_TYPE_CHOICES = [
+        ('signals', 'Trading Signals'),
+        ('mentorship', 'Mentorship'),
+        ('consultation', 'Consultation'),
+        ('course', 'Trading Course'),
+    ]
+    
+    DURATION_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('quarterly', 'Quarterly'),
+        ('yearly', 'Yearly'),
+        ('one_time', 'One Time'),
+    ]
+
+    name = models.CharField(max_length=255, help_text="Service name (e.g., Basic Signals)")
+    slug = models.SlugField(max_length=255, unique=True, blank=True)
+    service_type = models.CharField(max_length=20, choices=SERVICE_TYPE_CHOICES, default='signals')
+    description = models.TextField(help_text="Brief description of the service")
+    detailed_description = models.TextField(blank=True, help_text="Detailed description for service page")
+    
+    # Pricing
+    price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Service price")
+    currency = models.CharField(max_length=3, default='INR')
+    duration = models.CharField(max_length=20, choices=DURATION_CHOICES, default='monthly')
+    
+    # Features (JSON field to store list of features)
+    features = models.JSONField(default=list, help_text="List of service features")
+    
+    # Visibility and Status
+    is_active = models.BooleanField(default=True, help_text="Show on website")
+    is_featured = models.BooleanField(default=False, help_text="Mark as popular/featured")
+    is_popular = models.BooleanField(default=False, help_text="Show 'Most Popular' badge")
+    
+    # Contact and Booking
+    booking_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('whatsapp', 'WhatsApp'),
+            ('call', 'Phone Call'),
+            ('email', 'Email'),
+            ('form', 'Contact Form'),
+        ],
+        default='whatsapp',
+        help_text="How users can book this service"
+    )
+    contact_info = models.CharField(max_length=255, blank=True, help_text="Contact number/email for booking")
+    booking_url = models.URLField(blank=True, help_text="External booking URL if any")
+    
+    # Display Order
+    display_order = models.PositiveIntegerField(default=0, help_text="Order to display services")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # SEO
+    meta_title = models.CharField(max_length=60, blank=True, help_text="SEO title")
+    meta_description = models.CharField(max_length=160, blank=True, help_text="SEO description")
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        indexes = [
+            models.Index(fields=['is_active']),
+            models.Index(fields=['is_featured']),
+            models.Index(fields=['display_order']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} - {self.get_duration_display()}"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        if not self.meta_title:
+            self.meta_title = self.name[:60]
+        if not self.meta_description:
+            self.meta_description = self.description[:160]
+        super().save(*args, **kwargs)
+
+    def get_absolute_url(self):
+        return reverse('portfolio_app:service-detail', kwargs={'slug': self.slug})
+
+    @property
+    def price_display(self):
+        if self.duration == 'one_time':
+            return f"{self.currency} {self.price:,.0f}"
+        return f"{self.currency} {self.price:,.0f} / {self.get_duration_display().lower()}"
+
+    def get_booking_url(self):
+        """Generate booking URL based on booking type"""
+        if self.booking_url:
+            return self.booking_url
+        
+        if self.booking_type == 'whatsapp' and self.contact_info:
+            message = f"Hi! I'm interested in the {self.name} service. Can you provide more details?"
+            return f"https://wa.me/{self.contact_info}?text={message}"
+        elif self.booking_type == 'call' and self.contact_info:
+            return f"tel:{self.contact_info}"
+        elif self.booking_type == 'email' and self.contact_info:
+            subject = f"Inquiry about {self.name}"
+            body = f"Hi! I'm interested in the {self.name} service. Can you provide more details?"
+            return f"mailto:{self.contact_info}?subject={subject}&body={body}"
+        
+        return "/contact"  # Fallback to contact page
+
+class ServiceBooking(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('contacted', 'Contacted'),
+        ('confirmed', 'Confirmed'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    service = models.ForeignKey(TradingService, on_delete=models.CASCADE, related_name='bookings')
+    name = models.CharField(max_length=100, help_text="Customer name")
+    email = models.EmailField(help_text="Customer email")
+    phone = models.CharField(max_length=20, help_text="Customer phone number")
+    message = models.TextField(blank=True, help_text="Customer message/requirements")
+    
+    # Booking details
+    preferred_contact_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('whatsapp', 'WhatsApp'),
+            ('call', 'Phone Call'),
+            ('email', 'Email'),
+        ],
+        default='whatsapp'
+    )
+    preferred_time = models.CharField(max_length=100, blank=True, help_text="Preferred contact time")
+    
+    # Status and tracking
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_notes = models.TextField(blank=True, help_text="Internal notes")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    contacted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['service']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} - {self.service.name} ({self.get_status_display()})"
+
 class Payment(models.Model):
     PAYMENT_STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -413,6 +715,7 @@ class Payment(models.Model):
         ('workshop', 'Workshop'),
         ('product', 'Digital Product'),
         ('subscription', 'Subscription'),
+        ('service', 'Trading Service'),
     ]
 
     # Payment details
@@ -435,6 +738,7 @@ class Payment(models.Model):
     # Related objects
     workshop_application = models.ForeignKey(WorkshopApplication, on_delete=models.SET_NULL, null=True, blank=True)
     digital_product = models.ForeignKey(DigitalProduct, on_delete=models.SET_NULL, null=True, blank=True)
+    trading_service = models.ForeignKey(TradingService, on_delete=models.SET_NULL, null=True, blank=True)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -466,3 +770,114 @@ class Payment(models.Model):
         # Update related application if exists
         if self.workshop_application:
             self.workshop_application.mark_payment_completed(gateway_payment_id, payment_method)
+
+class ContactMessage(models.Model):
+    STATUS_CHOICES = [
+        ('new', 'New'),
+        ('read', 'Read'),
+        ('replied', 'Replied'),
+        ('resolved', 'Resolved'),
+        ('archived', 'Archived'),
+    ]
+
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('normal', 'Normal'),
+        ('high', 'High'),
+        ('urgent', 'Urgent'),
+    ]
+
+    # Contact details
+    name = models.CharField(max_length=100, help_text="Sender's name")
+    email = models.EmailField(help_text="Sender's email address")
+    subject = models.CharField(max_length=255, help_text="Message subject")
+    message = models.TextField(help_text="Message content")
+    
+    # Classification and status
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='new')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='normal')
+    
+    # Admin fields
+    admin_notes = models.TextField(blank=True, help_text="Internal admin notes")
+    assigned_to = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='assigned_contacts',
+        help_text="Admin user assigned to handle this message"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    read_at = models.DateTimeField(null=True, blank=True, help_text="When the message was first read")
+    replied_at = models.DateTimeField(null=True, blank=True, help_text="When a reply was sent")
+    
+    # Additional metadata
+    ip_address = models.GenericIPAddressField(null=True, blank=True, help_text="Sender's IP address")
+    user_agent = models.TextField(blank=True, help_text="Sender's browser user agent")
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['priority']),
+            models.Index(fields=['email']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} - {self.subject} ({self.get_status_display()})"
+
+    def mark_as_read(self, user=None):
+        """Mark the message as read"""
+        if self.status == 'new':
+            self.status = 'read'
+            self.read_at = timezone.now()
+            if user:
+                self.assigned_to = user
+            self.save(update_fields=['status', 'read_at', 'assigned_to'])
+
+    def mark_as_replied(self):
+        """Mark the message as replied"""
+        self.status = 'replied'
+        self.replied_at = timezone.now()
+        self.save(update_fields=['status', 'replied_at'])
+
+    @property
+    def is_new(self):
+        return self.status == 'new'
+
+    @property
+    def is_urgent(self):
+        return self.priority in ['high', 'urgent']
+
+    @property
+    def response_time(self):
+        """Calculate response time if replied"""
+        if self.replied_at:
+            delta = self.replied_at - self.created_at
+            return delta
+        return None
+
+    def get_priority_color(self):
+        """Get color for priority display"""
+        colors = {
+            'low': '#28a745',      # Green
+            'normal': '#6c757d',   # Gray
+            'high': '#fd7e14',     # Orange
+            'urgent': '#dc3545',   # Red
+        }
+        return colors.get(self.priority, '#6c757d')
+
+    def get_status_color(self):
+        """Get color for status display"""
+        colors = {
+            'new': '#007bff',      # Blue
+            'read': '#6c757d',     # Gray
+            'replied': '#28a745',  # Green
+            'resolved': '#20c997', # Teal
+            'archived': '#6f42c1', # Purple
+        }
+        return colors.get(self.status, '#6c757d')

@@ -180,18 +180,23 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Email Configuration
+# Email Configuration - Brevo (Sendinblue)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-# Gmail SMTP Configuration
-EMAIL_HOST = 'smtp.gmail.com'
+# Brevo SMTP Configuration
+EMAIL_HOST = 'smtp-relay.brevo.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'amardeepasode.trading@gmail.com'  # Replace with your Gmail
-EMAIL_HOST_PASSWORD = 'your-app-password'  # Replace with your Gmail App Password
+EMAIL_HOST_USER = 'amardeepasode.trading@gmail.com'  # Your verified sender email
+EMAIL_HOST_PASSWORD = 'your-brevo-smtp-password'  # Brevo SMTP password (different from API key)
+
+# Brevo API Configuration
+BREVO_API_KEY = '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'
+BREVO_API_URL = 'https://api.brevo.com/v3'
 
 DEFAULT_FROM_EMAIL = 'Amardeep Asode Trading <amardeepasode.trading@gmail.com>'
-FRONTEND_URL = 'http://localhost:3001'
+ADMIN_EMAIL = 'amardeepasode.trading@gmail.com'
+FRONTEND_URL = 'http://localhost:3000'
 
 # Email settings
 EMAIL_TIMEOUT = 60

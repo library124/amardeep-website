@@ -26,7 +26,7 @@ const LoginPage: React.FC = () => {
 
     try {
       const response = await api.post('/auth/login/', { email, password });
-      login(response.data.token);
+      login(response.data.token, response.data.user);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
     } finally {

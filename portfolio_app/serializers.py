@@ -2,7 +2,9 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
     Achievement, DigitalProduct, Subscriber, Newsletter, BlogPost, 
-    BlogCategory, BlogTag, Workshop, WorkshopApplication, Payment
+    BlogCategory, BlogTag, Workshop, WorkshopApplication, Payment,
+    TradingService, ServiceBooking, UserProfile, PurchasedCourse,
+    ContactMessage
 )
 from django.utils import timezone
 
@@ -251,3 +253,154 @@ class SubscriberCreateUpdateSerializer(serializers.ModelSerializer):
         if Subscriber.objects.filter(email=value, is_active=True).exists():
             raise serializers.ValidationError("This email is already subscribed.")
         return value
+
+class TradingServiceSerializer(serializers.ModelSerializer):
+    price_display = serializers.ReadOnlyField()
+    booking_url = serializers.ReadOnlyField(source='get_booking_url')
+    
+    class Meta:
+        model = TradingService
+        fields = [
+            'id', 'name', 'slug', 'service_type', 'description', 'detailed_description',
+            'price', 'currency', 'duration', 'price_display', 'features',
+            'is_active', 'is_featured', 'is_popular', 'booking_type', 'contact_info',
+            'booking_url', 'display_order', 'meta_title', 'meta_description'
+        ]
+
+class TradingServiceCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TradingService
+        fields = [
+            'name', 'service_type', 'description', 'detailed_description',
+            'price', 'currency', 'duration', 'features', 'is_active', 'is_featured',
+            'is_popular', 'booking_type', 'contact_info', 'booking_url', 'display_order',
+            'meta_title', 'meta_description'
+        ]
+
+class ServiceBookingSerializer(serializers.ModelSerializer):
+    service_name = serializers.CharField(source='service.name', read_only=True)
+    
+    class Meta:
+        model = ServiceBooking
+        fields = [
+            'id', 'service', 'service_name', 'name', 'email', 'phone', 'message',
+            'preferred_contact_method', 'preferred_time', 'status', 'created_at'
+        ]
+        read_only_fields = ['id', 'service_name', 'status', 'created_at']
+
+class ServiceBookingCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ServiceBooking
+        fields = [
+            'service', 'name', 'email', 'phone', 'message',
+            'preferred_contact_method', 'preferred_time'
+        ]
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    full_name = serializers.ReadOnlyField()
+    display_name = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = UserProfile
+        fields = [
+            'phone', 'date_of_birth', 'bio', 'profile_picture',
+            'trading_experience', 'preferred_market', 'newsletter_subscribed',
+            'email_notifications', 'sms_notifications', 'full_name', 'display_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+class UserDetailSerializer(serializers.ModelSerializer):
+    profile = UserProfileSerializer(read_only=True)
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'date_joined', 'profile'
+        ]
+        read_only_fields = ['id', 'username', 'date_joined']
+
+class PurchasedCourseSerializer(serializers.ModelSerializer):
+    is_active = serializers.ReadOnlyField()
+    days_remaining = serializers.ReadOnlyField()
+    price_display = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = PurchasedCourse
+        fields = [
+            'id', 'course_name', 'course_type', 'description', 'purchase_date',
+            'start_date', 'end_date', 'status', 'amount_paid', 'currency',
+            'price_display', 'access_url', 'progress_percentage', 'last_accessed',
+            'is_active', 'days_remaining', 'created_at'
+        ]
+        read_only_fields = ['id', 'purchase_date', 'created_at']
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, min_length=8)
+    confirm_password = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError("New passwords don't match.")
+        return attrs
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Old password is incorrect.")
+        return value
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
+    response_time = serializers.ReadOnlyField()
+    is_new = serializers.ReadOnlyField()
+    is_urgent = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = ContactMessage
+        fields = [
+            'id', 'name', 'email', 'subject', 'message', 'status', 'status_display',
+            'priority', 'priority_display', 'admin_notes', 'assigned_to', 'assigned_to_name',
+            'created_at', 'updated_at', 'read_at', 'replied_at', 'ip_address',
+            'response_time', 'is_new', 'is_urgent'
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'updated_at', 'read_at', 'replied_at', 'ip_address',
+            'status_display', 'priority_display', 'assigned_to_name', 'response_time',
+            'is_new', 'is_urgent'
+        ]
+
+class ContactMessageCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactMessage
+        fields = ['name', 'email', 'subject', 'message']
+        
+    def validate_email(self, value):
+        # Basic email validation (Django already handles format)
+        if not value:
+            raise serializers.ValidationError("Email is required.")
+        return value.lower()
+    
+    def validate_message(self, value):
+        if len(value.strip()) < 10:
+            raise serializers.ValidationError("Message must be at least 10 characters long.")
+        return value.strip()
+    
+    def validate_subject(self, value):
+        if len(value.strip()) < 3:
+            raise serializers.ValidationError("Subject must be at least 3 characters long.")
+        return value.strip()
+    
+    def validate_name(self, value):
+        if len(value.strip()) < 2:
+            raise serializers.ValidationError("Name must be at least 2 characters long.")
+        return value.strip()
+
+class ContactMessageUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContactMessage
+        fields = ['status', 'priority', 'admin_notes', 'assigned_to']

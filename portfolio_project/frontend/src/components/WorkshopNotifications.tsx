@@ -18,12 +18,20 @@ const WorkshopNotifications: React.FC = () => {
 
   const fetchUpcomingWorkshops = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/workshops/upcoming/');
+      // Try active workshops first, fallback to upcoming if needed
+      const response = await fetch('http://localhost:8000/api/workshops/active/');
       if (response.ok) {
         const data = await response.json();
         setWorkshops(data);
       } else {
-        setError('Failed to fetch workshops');
+        // Fallback to upcoming workshops
+        const fallbackResponse = await fetch('http://localhost:8000/api/workshops/upcoming/');
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          setWorkshops(fallbackData);
+        } else {
+          setError('Failed to fetch workshops');
+        }
       }
     } catch (err) {
       setError('Network error');

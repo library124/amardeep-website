@@ -4,7 +4,8 @@ from django.conf import settings
 from django.contrib import messages
 from django.utils.html import format_html
 from django.utils import timezone
-from .models import Achievement, DigitalProduct, Subscriber, Newsletter, BlogPost, BlogCategory, BlogTag, Workshop, WorkshopApplication, Payment
+from .models import Achievement, DigitalProduct, Subscriber, Newsletter, BlogPost, BlogCategory, BlogTag, Workshop, WorkshopApplication, Payment, TradingService, ServiceBooking
+from .services.brevo_service import brevo_service
 
 @admin.register(Achievement)
 class AchievementAdmin(admin.ModelAdmin):
@@ -19,10 +20,135 @@ class DigitalProductAdmin(admin.ModelAdmin):
 
 @admin.register(Subscriber)
 class SubscriberAdmin(admin.ModelAdmin):
-    list_display = ['email', 'name', 'is_confirmed', 'is_active', 'subscribed_at']
-    list_filter = ['is_confirmed', 'is_active', 'subscribed_at']
+    list_display = ['email', 'name', 'status_badge', 'subscribed_at', 'confirmed_at', 'actions_column']
+    list_display_links = ['email']
+    list_filter = ['is_confirmed', 'is_active', 'subscribed_at', 'confirmed_at']
     search_fields = ['email', 'name']
     readonly_fields = ['confirmation_token', 'subscribed_at', 'confirmed_at']
+    list_per_page = 50
+    date_hierarchy = 'subscribed_at'
+    
+    fieldsets = (
+        ('Subscriber Information', {
+            'fields': ('email', 'name', 'is_confirmed', 'is_active'),
+            'description': 'Basic subscriber information'
+        }),
+        ('Subscription Details', {
+            'fields': ('confirmation_token', 'subscribed_at', 'confirmed_at'),
+            'description': 'Subscription timeline and confirmation details'
+        }),
+    )
+    
+    def status_badge(self, obj):
+        if obj.is_confirmed and obj.is_active:
+            return format_html(
+                '<span style="background: #28a745; color: white; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">'
+                '✅ ACTIVE</span>'
+            )
+        elif obj.is_confirmed and not obj.is_active:
+            return format_html(
+                '<span style="background: #6c757d; color: white; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">'
+                '🚫 UNSUBSCRIBED</span>'
+            )
+        else:
+            return format_html(
+                '<span style="background: #ffc107; color: black; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">'
+                '⏳ PENDING</span>'
+            )
+    status_badge.short_description = 'Status'
+    
+    def actions_column(self, obj):
+        actions = []
+        
+        if not obj.is_confirmed:
+            actions.append(
+                f'<a href="#" onclick="confirmSubscriber({obj.id})" '
+                f'style="color: #28a745; text-decoration: none; margin-right: 10px;">✅ Confirm</a>'
+            )
+            actions.append(
+                f'<a href="#" onclick="resendConfirmation({obj.id})" '
+                f'style="color: #17a2b8; text-decoration: none; margin-right: 10px;">📧 Resend</a>'
+            )
+        
+        if obj.is_active:
+            actions.append(
+                f'<a href="#" onclick="deactivateSubscriber({obj.id})" '
+                f'style="color: #dc3545; text-decoration: none;">🚫 Deactivate</a>'
+            )
+        else:
+            actions.append(
+                f'<a href="#" onclick="activateSubscriber({obj.id})" '
+                f'style="color: #28a745; text-decoration: none;">✅ Activate</a>'
+            )
+        
+        return format_html(' | '.join(actions))
+    actions_column.short_description = 'Quick Actions'
+    
+    actions = [
+        'confirm_subscribers', 'activate_subscribers', 'deactivate_subscribers', 
+        'resend_confirmations', 'export_subscribers'
+    ]
+    
+    def confirm_subscribers(self, request, queryset):
+        updated = 0
+        for subscriber in queryset.filter(is_confirmed=False):
+            subscriber.confirm_subscription()
+            updated += 1
+        self.message_user(request, f'{updated} subscribers confirmed.', messages.SUCCESS)
+    confirm_subscribers.short_description = "✅ Confirm selected subscribers"
+    
+    def activate_subscribers(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} subscribers activated.', messages.SUCCESS)
+    activate_subscribers.short_description = "✅ Activate subscribers"
+    
+    def deactivate_subscribers(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} subscribers deactivated.', messages.WARNING)
+    deactivate_subscribers.short_description = "🚫 Deactivate subscribers"
+    
+    def resend_confirmations(self, request, queryset):
+        sent_count = 0
+        failed_count = 0
+        
+        for subscriber in queryset.filter(is_confirmed=False):
+            try:
+                success = brevo_service.send_newsletter_confirmation(subscriber)
+                if success:
+                    sent_count += 1
+                else:
+                    failed_count += 1
+            except Exception as e:
+                failed_count += 1
+                print(f"Failed to send confirmation to {subscriber.email}: {e}")
+        
+        if sent_count > 0:
+            self.message_user(request, f'Confirmation emails sent to {sent_count} subscribers.', messages.SUCCESS)
+        if failed_count > 0:
+            self.message_user(request, f'Failed to send to {failed_count} subscribers.', messages.ERROR)
+    resend_confirmations.short_description = "📧 Resend confirmation emails"
+    
+    def export_subscribers(self, request, queryset):
+        import csv
+        from django.http import HttpResponse
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="subscribers.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['Email', 'Name', 'Status', 'Confirmed', 'Subscribed Date', 'Confirmed Date'])
+        
+        for subscriber in queryset:
+            status = 'Active' if subscriber.is_confirmed and subscriber.is_active else 'Pending' if not subscriber.is_confirmed else 'Unsubscribed'
+            writer.writerow([
+                subscriber.email, subscriber.name or '', status,
+                'Yes' if subscriber.is_confirmed else 'No',
+                subscriber.subscribed_at.strftime('%Y-%m-%d %H:%M'),
+                subscriber.confirmed_at.strftime('%Y-%m-%d %H:%M') if subscriber.confirmed_at else ''
+            ])
+        
+        return response
+    export_subscribers.short_description = "📊 Export to CSV"
     
     def get_queryset(self, request):
         return super().get_queryset(request).order_by('-subscribed_at')
@@ -391,7 +517,7 @@ class WorkshopAdmin(admin.ModelAdmin):
         }),
         ('Schedule & Capacity', {
             'fields': ('start_date', 'end_date', 'duration_hours', 'max_participants'),
-            'description': 'Workshop timing and capacity'
+            'description': 'Workshop timing and capacity. Note: Workshops appear on frontend if they are active and have recent/future dates.'
         }),
         ('Status & Visibility', {
             'fields': ('status', 'is_featured', 'is_active'),
@@ -414,6 +540,9 @@ class WorkshopAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         if not change:  # If creating new workshop
             obj.instructor = request.user
+            # Ensure new workshops are active by default
+            if obj.is_active is None:
+                obj.is_active = True
         super().save_model(request, obj, form, change)
     
     def get_queryset(self, request):
@@ -459,7 +588,7 @@ class WorkshopAdmin(admin.ModelAdmin):
     
     actions = [
         'make_featured', 'remove_featured', 'activate_workshops', 'deactivate_workshops',
-        'mark_as_upcoming', 'mark_as_completed'
+        'mark_as_upcoming', 'mark_as_completed', 'update_dates_to_future'
     ]
     
     def make_featured(self, request, queryset):
@@ -491,6 +620,22 @@ class WorkshopAdmin(admin.ModelAdmin):
         updated = queryset.update(status='completed')
         self.message_user(request, f'{updated} workshops were marked as completed.', messages.SUCCESS)
     mark_as_completed.short_description = "✅ Mark as completed"
+    
+    def update_dates_to_future(self, request, queryset):
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        updated = 0
+        for workshop in queryset:
+            # Set start date to 7 days from now
+            workshop.start_date = timezone.now() + timedelta(days=7)
+            # Set end date to start date + duration
+            workshop.end_date = workshop.start_date + timedelta(hours=workshop.duration_hours)
+            workshop.save()
+            updated += 1
+        
+        self.message_user(request, f'{updated} workshops had their dates updated to future dates.', messages.SUCCESS)
+    update_dates_to_future.short_description = "📅 Update dates to future (for visibility)"
     
     class Media:
         css = {
@@ -777,6 +922,242 @@ class PaymentAdmin(admin.ModelAdmin):
         
         return response
     export_payments.short_description = "📊 Export to CSV"
+
+@admin.register(TradingService)
+class TradingServiceAdmin(admin.ModelAdmin):
+    list_display = [
+        'name', 'service_type', 'price_display_admin', 'duration', 
+        'is_active', 'is_featured', 'is_popular', 'display_order'
+    ]
+    list_display_links = ['name']
+    list_filter = [
+        'service_type', 'duration', 'is_active', 'is_featured', 
+        'is_popular', 'booking_type', 'created_at'
+    ]
+    search_fields = ['name', 'description', 'detailed_description']
+    prepopulated_fields = {'slug': ('name',)}
+    list_editable = ['is_active', 'is_featured', 'is_popular', 'display_order']
+    list_per_page = 20
+    
+    fieldsets = (
+        ('Service Information', {
+            'fields': ('name', 'slug', 'service_type', 'description', 'detailed_description'),
+            'description': 'Basic service information'
+        }),
+        ('Pricing', {
+            'fields': ('price', 'currency', 'duration'),
+            'description': 'Service pricing and billing information'
+        }),
+        ('Features', {
+            'fields': ('features',),
+            'description': 'Service features (JSON format: ["Feature 1", "Feature 2"])'
+        }),
+        ('Visibility & Status', {
+            'fields': ('is_active', 'is_featured', 'is_popular', 'display_order'),
+            'description': 'Control service visibility and ordering'
+        }),
+        ('Booking Configuration', {
+            'fields': ('booking_type', 'contact_info', 'booking_url'),
+            'description': 'How customers can book this service'
+        }),
+        ('SEO & Metadata', {
+            'fields': ('meta_title', 'meta_description'),
+            'classes': ('collapse',),
+            'description': 'Search engine optimization'
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+            'description': 'Creation and modification dates'
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at']
+    
+    def price_display_admin(self, obj):
+        return format_html(
+            '<strong style="color: #28a745;">{}</strong>',
+            obj.price_display
+        )
+    price_display_admin.short_description = 'Price'
+    
+    actions = [
+        'make_featured', 'remove_featured', 'make_popular', 'remove_popular',
+        'activate_services', 'deactivate_services'
+    ]
+    
+    def make_featured(self, request, queryset):
+        updated = queryset.update(is_featured=True)
+        self.message_user(request, f'{updated} services were marked as featured.', messages.SUCCESS)
+    make_featured.short_description = "⭐ Mark as featured"
+    
+    def remove_featured(self, request, queryset):
+        updated = queryset.update(is_featured=False)
+        self.message_user(request, f'{updated} services were removed from featured.', messages.SUCCESS)
+    remove_featured.short_description = "❌ Remove from featured"
+    
+    def make_popular(self, request, queryset):
+        updated = queryset.update(is_popular=True)
+        self.message_user(request, f'{updated} services were marked as popular.', messages.SUCCESS)
+    make_popular.short_description = "🔥 Mark as popular"
+    
+    def remove_popular(self, request, queryset):
+        updated = queryset.update(is_popular=False)
+        self.message_user(request, f'{updated} services were removed from popular.', messages.SUCCESS)
+    remove_popular.short_description = "❌ Remove from popular"
+    
+    def activate_services(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} services were activated.', messages.SUCCESS)
+    activate_services.short_description = "✅ Activate services"
+    
+    def deactivate_services(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} services were deactivated.', messages.WARNING)
+    deactivate_services.short_description = "🚫 Deactivate services"
+
+@admin.register(ServiceBooking)
+class ServiceBookingAdmin(admin.ModelAdmin):
+    list_display = [
+        'name', 'email', 'service_name', 'preferred_contact_method', 
+        'status_badge', 'created_at', 'actions_column'
+    ]
+    list_display_links = ['name']
+    list_filter = [
+        'status', 'preferred_contact_method', 'created_at', 
+        'service__name', 'service__service_type'
+    ]
+    search_fields = ['name', 'email', 'phone', 'service__name', 'message']
+    date_hierarchy = 'created_at'
+    list_per_page = 25
+    
+    fieldsets = (
+        ('Customer Information', {
+            'fields': ('name', 'email', 'phone', 'preferred_contact_method', 'preferred_time'),
+            'description': 'Customer contact details'
+        }),
+        ('Service & Request', {
+            'fields': ('service', 'message'),
+            'description': 'Service booking details'
+        }),
+        ('Status & Management', {
+            'fields': ('status', 'admin_notes', 'contacted_at'),
+            'description': 'Booking status and admin notes'
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+            'description': 'Booking timeline'
+        }),
+    )
+    
+    readonly_fields = ['created_at', 'updated_at']
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('service')
+    
+    def service_name(self, obj):
+        return obj.service.name
+    service_name.short_description = 'Service'
+    service_name.admin_order_field = 'service__name'
+    
+    def status_badge(self, obj):
+        colors = {
+            'pending': '#ffc107',
+            'contacted': '#17a2b8',
+            'confirmed': '#28a745',
+            'completed': '#6f42c1',
+            'cancelled': '#dc3545'
+        }
+        icons = {
+            'pending': '⏳',
+            'contacted': '📞',
+            'confirmed': '✅',
+            'completed': '🎉',
+            'cancelled': '❌'
+        }
+        color = colors.get(obj.status, '#6c757d')
+        icon = icons.get(obj.status, '❓')
+        
+        return format_html(
+            '<span style="background: {}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">'
+            '{} {}</span>',
+            color, icon, obj.get_status_display().upper()
+        )
+    status_badge.short_description = 'Status'
+    
+    def actions_column(self, obj):
+        actions = []
+        
+        if obj.status == 'pending':
+            actions.append(
+                f'<a href="#" onclick="updateBookingStatus({obj.id}, \'contacted\')" '
+                f'style="color: #17a2b8; text-decoration: none; margin-right: 10px;">📞 Mark Contacted</a>'
+            )
+        
+        if obj.status in ['pending', 'contacted']:
+            actions.append(
+                f'<a href="#" onclick="updateBookingStatus({obj.id}, \'confirmed\')" '
+                f'style="color: #28a745; text-decoration: none; margin-right: 10px;">✅ Confirm</a>'
+            )
+        
+        # Contact links
+        if obj.preferred_contact_method == 'whatsapp' and obj.phone:
+            message = f"Hi {obj.name}! Thank you for your interest in {obj.service.name}. How can I help you?"
+            actions.append(
+                f'<a href="https://wa.me/{obj.phone}?text={message}" target="_blank" '
+                f'style="color: #25d366; text-decoration: none; margin-right: 10px;">💬 WhatsApp</a>'
+            )
+        
+        actions.append(
+            f'<a href="mailto:{obj.email}?subject=Re: {obj.service.name} Inquiry" '
+            f'style="color: #007bff; text-decoration: none;">📧 Email</a>'
+        )
+        
+        return format_html(' | '.join(actions))
+    actions_column.short_description = 'Quick Actions'
+    
+    actions = [
+        'mark_contacted', 'mark_confirmed', 'mark_completed', 'export_bookings'
+    ]
+    
+    def mark_contacted(self, request, queryset):
+        updated = queryset.update(status='contacted', contacted_at=timezone.now())
+        self.message_user(request, f'{updated} bookings marked as contacted.', messages.SUCCESS)
+    mark_contacted.short_description = "📞 Mark as contacted"
+    
+    def mark_confirmed(self, request, queryset):
+        updated = queryset.update(status='confirmed')
+        self.message_user(request, f'{updated} bookings confirmed.', messages.SUCCESS)
+    mark_confirmed.short_description = "✅ Mark as confirmed"
+    
+    def mark_completed(self, request, queryset):
+        updated = queryset.update(status='completed')
+        self.message_user(request, f'{updated} bookings completed.', messages.SUCCESS)
+    mark_completed.short_description = "🎉 Mark as completed"
+    
+    def export_bookings(self, request, queryset):
+        import csv
+        from django.http import HttpResponse
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="service_bookings.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Name', 'Email', 'Phone', 'Service', 'Status', 
+            'Preferred Contact', 'Created Date', 'Message'
+        ])
+        
+        for booking in queryset:
+            writer.writerow([
+                booking.name, booking.email, booking.phone, booking.service.name,
+                booking.get_status_display(), booking.get_preferred_contact_method_display(),
+                booking.created_at.strftime('%Y-%m-%d %H:%M'), booking.message
+            ])
+        
+        return response
+    export_bookings.short_description = "📊 Export to CSV"
 
 # Customize admin site
 admin.site.site_header = "Amardeep Asode Trading Portfolio Admin"
