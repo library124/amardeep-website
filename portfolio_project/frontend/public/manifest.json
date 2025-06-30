@@ -1,0 +1,31 @@
+{
+  "name": "Amardeep Asode - Professional Stock & Intraday Trader",
+  "short_name": "Amardeep Asode",
+  "description": "Expert in intraday strategies for consistent results. Transforming trading performance through proven methodologies.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00E676",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["finance", "business", "education"],
+  "lang": "en",
+  "dir": "ltr"
+}

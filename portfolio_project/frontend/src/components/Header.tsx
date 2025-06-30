@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Logo from './Logo';
 
 const Header: React.FC = () => {
   const { isAuthenticated, logout } = useAuth();
@@ -16,6 +17,7 @@ const Header: React.FC = () => {
   const navItems = [
     { href: '/', label: 'Home' },
     { href: '/about', label: 'About' },
+    { href: '/courses', label: 'Courses' },
     { href: '/achievements', label: 'Performance' },
     { href: '/products', label: 'Services' },
     { href: '/blog', label: 'Blog' },
@@ -47,16 +49,14 @@ const Header: React.FC = () => {
       }`}
     >
       <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex justify-between items-center h-20 sm:h-24">
           {/* Logo */}
-          <Link 
-            href="/" 
-            className={`text-xl font-semibold transition-colors duration-200 ${
-              isScrolled ? 'text-gray-900' : 'text-gray-900'
-            }`}
-          >
-            Amardeep Asode
-          </Link>
+          <Logo 
+            size="xl" 
+            isScrolled={isScrolled} 
+            showText={false}
+            className="flex-shrink-0"
+          />
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-1">

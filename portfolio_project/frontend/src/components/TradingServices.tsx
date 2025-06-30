@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ServiceBookingModal from './ServiceBookingModal';
+import PaymentButton from './PaymentButton';
 
 interface TradingService {
   id: number;
@@ -217,13 +218,32 @@ const TradingServices: React.FC = () => {
                         );
                       })}
                     </div>
-                    <Button 
-                      variant={service.is_popular ? "default" : "outline"} 
-                      className="gap-4"
-                      onClick={() => handleBookService(service)}
-                    >
-                      {getBookingText(service.booking_type)} {getBookingIcon(service.booking_type)}
-                    </Button>
+                    {service.booking_type === 'form' && service.price > 0 ? (
+                      <PaymentButton
+                        item={service}
+                        itemType="service"
+                        variant={service.is_popular ? "primary" : "outline"}
+                        className="gap-4"
+                        onPaymentSuccess={(result) => {
+                          alert(result.message || 'Service booking successful!');
+                          // Optionally refresh services or redirect
+                        }}
+                        onPaymentError={(error) => {
+                          console.error('Service payment failed:', error);
+                          alert('Payment failed. Please try again.');
+                        }}
+                      >
+                        Book Now {getBookingIcon('form')}
+                      </PaymentButton>
+                    ) : (
+                      <Button 
+                        variant={service.is_popular ? "default" : "outline"} 
+                        className="gap-4"
+                        onClick={() => handleBookService(service)}
+                      >
+                        {getBookingText(service.booking_type)} {getBookingIcon(service.booking_type)}
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

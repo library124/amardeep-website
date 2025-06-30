@@ -1,0 +1,27 @@
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="blue-gradient-favicon" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="#34568B" />
+<stop offset="100%" stop-color="#1D2B64" />
+</linearGradient>
+
+<style>
+.accent-fill-favicon { fill: #00E676; }
+.line-stroke-favicon {
+stroke: url(#blue-gradient-favicon);
+stroke-width: 2.5; /* Made slightly thicker for better visibility at small sizes */
+stroke-linecap: round;
+stroke-linejoin: round;
+fill: none;
+}
+</style>
+</defs>
+
+<!-- The icon is centered in the square canvas for perfect display -->
+<g id="logomark" transform="translate(3, 0)">
+<rect class="accent-fill-favicon" x="5" y="12" width="10" height="25" rx="2" />
+<path class="line-stroke-favicon" d="M10 12 L10 2 C10 2 20 2 30 20 L35 30" />
+<path class="line-stroke-favicon" d="M10 37 L10 40" />
+<path class="line-stroke-favicon" d="M14 22 L28 22" />
+</g>
+</svg>

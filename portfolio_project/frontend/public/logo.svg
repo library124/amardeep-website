@@ -1,0 +1,61 @@
+<svg width="270" height="42" viewBox="0 0 270 42" xmlns="http://www.w3.org/2000/svg">
+    <!--
+    ======================================================================
+    |   AMARDEEP ASODE - "The Candlestick Monogram" (Polished Edition)    |
+    |   A premium logo designed for maximum clarity and sophistication.    |
+    ======================================================================
+    -->
+
+    <defs>
+        <!-- A rich blue gradient for a premium, metallic feel on the text -->
+        <linearGradient id="blue-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#34568B" />
+            <stop offset="100%" stop-color="#1D2B64" />
+        </linearGradient>
+
+        <style>
+            /* The vibrant green for the candlestick body, signifying profit */
+            .accent-fill { fill: #00E676; }
+
+            /* The primary color for text and parts of the icon, using the gradient */
+            .primary-fill { fill: url(#blue-gradient); }
+
+            /* Clean, thin lines for the crossbar and wick */
+            .line-stroke { 
+                stroke: url(#blue-gradient); 
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                fill: none;
+            }
+
+            /* The refined typography using the Poppins font */
+            .logo-text {
+                font-family: 'Poppins', 'Helvetica Neue', Arial, sans-serif;
+                font-size: 20px;
+                font-weight: 500; /* Medium weight for a clean, modern look */
+                letter-spacing: 0.2px;
+            }
+        </style>
+    </defs>
+
+    <!-- LOGOMARK GROUP ("A" as a Candlestick) -->
+    <g id="logomark" transform="translate(0, 0)">
+        <!-- The body of the candlestick (the green box) forming the left leg -->
+        <rect class="accent-fill" x="5" y="12" width="10" height="25" rx="2" />
+
+        <!-- The upper wick, which elegantly forms the right leg of the 'A' -->
+        <path class="line-stroke" d="M10 12 L10 2 C10 2 20 2 30 20 L35 30" />
+        
+        <!-- The lower wick of the candlestick -->
+        <path class="line-stroke" d="M10 37 L10 40" />
+
+        <!-- The crossbar of the 'A' -->
+        <path class="line-stroke" d="M14 22 L28 22" />
+    </g>
+
+    <!-- LOGOTYPE GROUP (The Name) -->
+    <text class="logo-text primary-fill" x="52" y="28">
+        AMARDEEP ASODE
+    </text>
+</svg>
