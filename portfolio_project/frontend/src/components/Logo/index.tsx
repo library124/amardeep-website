@@ -7,6 +7,16 @@ import LogoCompact from './LogoCompact';
 // Export individual components for specific use cases
 export { LogoIcon, LogoFull, LogoCompact };
 
+// Type definitions following SOLID principles - Interface Segregation
+interface IconSizeConfig {
+  size: number;
+}
+
+interface DimensionSizeConfig {
+  width: number;
+  height: number;
+}
+
 // Main Logo component that adapts based on props
 interface LogoProps {
   variant?: 'icon' | 'compact' | 'full';
@@ -27,15 +37,19 @@ const Logo: React.FC<LogoProps> = ({
   isScrolled = false,
   showText = true // For backward compatibility
 }) => {
-  // Size mappings for different variants
-  const getSizeConfig = () => {
+  // Size mappings for different variants - following Single Responsibility Principle
+  const getIconSizeConfig = (size: string): IconSizeConfig => {
     const configs = {
-      icon: {
-        small: { size: 28 },
-        medium: { size: 36 },
-        large: { size: 48 },
-        xl: { size: 64 }
-      },
+      small: { size: 28 },
+      medium: { size: 36 },
+      large: { size: 48 },
+      xl: { size: 64 }
+    };
+    return configs[size as keyof typeof configs];
+  };
+
+  const getDimensionSizeConfig = (size: string, variant: 'compact' | 'full'): DimensionSizeConfig => {
+    const configs = {
       compact: {
         small: { width: 80, height: 28 },
         medium: { width: 100, height: 36 },
@@ -49,44 +63,47 @@ const Logo: React.FC<LogoProps> = ({
         xl: { width: 300, height: 48 }
       }
     };
-
-    return configs[variant][size];
+    return configs[variant][size as keyof typeof configs.compact];
   };
-
-  const sizeConfig = getSizeConfig();
 
   // Determine color based on scroll state if using default
   const logoColor = color === 'default' && isScrolled ? 'dark' : color;
 
   const renderLogo = () => {
     switch (variant) {
-      case 'icon':
+      case 'icon': {
+        const iconConfig = getIconSizeConfig(size);
         return (
           <LogoIcon 
-            size={sizeConfig.size}
+            size={iconConfig.size}
             color={logoColor}
             className="transition-all duration-200"
           />
         );
-      case 'full':
+      }
+      case 'full': {
+        const dimensionConfig = getDimensionSizeConfig(size, 'full');
         return (
           <LogoFull 
-            width={sizeConfig.width}
-            height={sizeConfig.height}
+            width={dimensionConfig.width}
+            height={dimensionConfig.height}
             color={logoColor}
             className="transition-all duration-200"
           />
         );
-      default: // compact
+      }
+      default: { // compact
+        const dimensionConfig = getDimensionSizeConfig(size, 'compact');
         return (
           <LogoCompact 
-            width={sizeConfig.width}
-            height={sizeConfig.height}
+            width={dimensionConfig.width}
+            height={dimensionConfig.height}
             color={logoColor}
             showInitials={showText}
             className="transition-all duration-200"
           />
         );
+      }
     }
   };
 

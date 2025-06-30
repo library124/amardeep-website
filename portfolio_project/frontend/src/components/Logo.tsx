@@ -14,8 +14,8 @@ const Logo: React.FC<LogoProps> = ({
   size = 'large', // Increased default size
   className = '',
   href = '/',
-  isScrolled = false,
-  showText = false // Default to false for navbar
+  isScrolled: _isScrolled = false, // Prefix with underscore to indicate intentionally unused
+  showText: _showText = false // Prefix with underscore to indicate intentionally unused
 }) => {
   // Size mappings - reduced by 10% from the 2x size as requested, maintaining aspect ratio of logo.svg (270:42)
   const getSizeConfig = () => {
