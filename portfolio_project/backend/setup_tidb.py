@@ -14,10 +14,10 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 django.setup()
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User as DjangoUser
 from portfolio_app.models import *
 from database.config import engine, Base, SessionLocal
-from database.models import *
+from database.models.analytics_models import *
 from database.sync import DataSyncManager
 import logging
 
@@ -72,7 +72,8 @@ def test_tidb_connection():
         
         with SessionLocal() as db:
             # Test basic connection
-            result = db.execute("SELECT 1 as test").fetchone()
+            from sqlalchemy import text
+            result = db.execute(text("SELECT 1 as test")).fetchone()
             if result:
                 print("✅ TiDB Cloud connection successful!")
             
@@ -97,9 +98,9 @@ def create_sample_django_data():
         print("📝 Checking Django sample data...")
         
         # Create a superuser if none exists
-        if not User.objects.filter(is_superuser=True).exists():
+        if not DjangoUser.objects.filter(is_superuser=True).exists():
             print("  - Creating superuser...")
-            User.objects.create_superuser(
+            DjangoUser.objects.create_superuser(
                 username='admin',
                 email='admin@example.com',
                 password='admin123'
@@ -108,20 +109,23 @@ def create_sample_django_data():
         # Create sample achievement if none exists
         if Achievement.objects.count() == 0:
             print("  - Creating sample achievements...")
-            Achievement.objects.create(
-                title="Trading Expert Certification",
-                description="Completed advanced trading course with 95% score",
-                date_achieved="2024-01-15",
-                category="education",
-                is_featured=True
-            )
-            Achievement.objects.create(
-                title="Risk Management Specialist",
-                description="Mastered advanced risk management strategies",
-                date_achieved="2024-02-20",
-                category="certification",
-                is_featured=True
-            )
+            # Get a user for the achievement
+            user = DjangoUser.objects.first()
+            if user:
+                Achievement.objects.create(
+                    title="Trading Expert Certification",
+                    description="Completed advanced trading course with 95% score",
+                    date="2024-01-15",
+                    user=user,
+                    metrics={"profit": 1000, "roi": 0.15}
+                )
+                Achievement.objects.create(
+                    title="Risk Management Specialist",
+                    description="Mastered advanced risk management strategies",
+                    date="2024-02-20",
+                    user=user,
+                    metrics={"risk_score": 0.05, "max_drawdown": 0.03}
+                )
         
         print("✅ Django sample data ready!")
         return True

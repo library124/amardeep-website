@@ -1,0 +1,26 @@
+databases:
+  - name: portfolio-db
+    plan: free
+    databaseName: portfolio
+    user: portfolio
+
+services:
+  - type: web
+    plan: free
+    name: amardeep-portfolio-backend
+    runtime: python
+    buildCommand: './build.sh'
+    startCommand: 'python -m gunicorn backend.wsgi:application'
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: portfolio-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: 4
+      - key: DEBUG
+        value: false
+      - key: FRONTEND_URL
+        value: https://your-frontend-domain.com

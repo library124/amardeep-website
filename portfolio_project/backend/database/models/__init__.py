@@ -8,6 +8,10 @@ from .product_models import DigitalProduct, TradingService, ServiceBooking
 from .payment_models import Payment, PurchasedCourse
 from .contact_models import ContactMessage
 from .achievement_models import Achievement
+from .analytics_models import (
+    UserAnalytics, WorkshopAnalytics, ContentAnalytics, 
+    RevenueAnalytics, NewsletterAnalytics, TradingServiceAnalytics
+)
 
 __all__ = [
     'User', 'UserProfile',
@@ -16,5 +20,7 @@ __all__ = [
     'DigitalProduct', 'TradingService', 'ServiceBooking',
     'Payment', 'PurchasedCourse',
     'ContactMessage',
-    'Achievement'
+    'Achievement',
+    'UserAnalytics', 'WorkshopAnalytics', 'ContentAnalytics',
+    'RevenueAnalytics', 'NewsletterAnalytics', 'TradingServiceAnalytics'
 ]

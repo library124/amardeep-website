@@ -202,3 +202,24 @@ FRONTEND_URL = 'http://localhost:3000'
 # Email settings
 EMAIL_TIMEOUT = 60
 EMAIL_USE_LOCALTIME = False
+
+# Razorpay Payment Gateway Configuration
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+RAZORPAY_KEY_ID = os.getenv('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.getenv('RAZORPAY_KEY_SECRET', '')
+RAZORPAY_WEBHOOK_SECRET = os.getenv('RAZORPAY_WEBHOOK_SECRET', '')
+
+# Payment settings
+PAYMENT_CURRENCY = 'INR'
+PAYMENT_SUCCESS_URL = f'{FRONTEND_URL}/payment/success'
+PAYMENT_FAILURE_URL = f'{FRONTEND_URL}/payment/failure'
+
+# Production settings for Render deployment
+import os
+if 'RENDER' in os.environ:
+    from .settings_production import *
