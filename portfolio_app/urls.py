@@ -40,6 +40,12 @@ from .views.product_views import (
 from .health_views import (
     health_check, api_status, payment_status
 )
+from .health_checks import (
+    health_check as comprehensive_health_check,
+    simple_health_check,
+    readiness_check,
+    liveness_check
+)
 
 # SQLAlchemy Views
 from .sqlalchemy_views import (
@@ -75,7 +81,10 @@ urlpatterns = [
     path('', include(router.urls)),
     
     # Health Check URLs
-    path('health/', health_check, name='health-check'),
+    path('health/', comprehensive_health_check, name='health-check'),
+    path('health/simple/', simple_health_check, name='simple-health-check'),
+    path('health/readiness/', readiness_check, name='readiness-check'),
+    path('health/liveness/', liveness_check, name='liveness-check'),
     path('status/', api_status, name='api-status'),
     path('payment/status/', payment_status, name='payment-status'),
     
