@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import React from "react";
 import Image from "next/image";
-import { Button as MovingBorderButton } from "@/components/ui/moving-border";
+import { SimpleButton } from "@/components/ui/simple-button";
 
 // Interface for hero content - following Single Responsibility Principle
 interface HeroContent {
@@ -92,17 +92,17 @@ const HeroTextContent: React.FC<{ content: HeroContent }> = ({ content }) => {
       </motion.p>
       
       <motion.div {...animationConfigs.button}>
-        <MovingBorderButton
+        <SimpleButton
           as="a"
           href="mailto:amardipasode@gmail.com?subject=Trading Consultation Request&body=Hi Amardeep,%0D%0A%0D%0AI would like to connect with you regarding trading consultation.%0D%0A%0D%0AThank you!"
-          borderRadius="1.75rem"
-          className="bg-white dark:bg-slate-900 text-black dark:text-white border-neutral-200 dark:border-slate-800 text-lg px-8 py-4 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all duration-300 hover:scale-105 cursor-pointer"
-          containerClassName="w-auto h-auto hover:shadow-lg transition-shadow duration-300"
+          variant="primary"
+          size="lg"
+          className="hover:scale-105 cursor-pointer"
           target="_blank"
           rel="noopener noreferrer"
         >
           {content.buttonText}
-        </MovingBorderButton>
+        </SimpleButton>
       </motion.div>
     </div>
   );

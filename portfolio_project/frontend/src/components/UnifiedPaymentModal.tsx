@@ -4,6 +4,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { paymentService, CreateOrderRequest, PaymentOrder } from '../lib/paymentService';
 import { useAuth } from '../context/AuthContext';
+import { ErrorUtils } from '../services/ErrorHandlingService';
+import { ValidationUtils, PaymentValidationContext } from '../services/PaymentValidationService';
+import ErrorBoundary from './ErrorBoundary';
 
 interface UnifiedPaymentModalProps {
   isOpen: boolean;
@@ -40,12 +43,44 @@ const UnifiedPaymentModal: React.FC<UnifiedPaymentModalProps> = ({
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    // Update form data
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+
+    // Real-time field validation
+    const validationContext: PaymentValidationContext = {
+      item,
+      itemType,
+      formData: { ...formData, [name]: value },
+      user
+    };
+
+    const fieldValidation = ValidationUtils.validatePaymentContext(validationContext);
+    
+    // Clear field error if validation passes, or update with specific field error
+    setFieldErrors(prev => {
+      const newErrors = { ...prev };
+      
+      // For now, we'll clear the field error if the overall validation passes
+      // In a more sophisticated implementation, we could validate individual fields
+      if (fieldValidation.isValid) {
+        delete newErrors[name];
+      }
+      
+      return newErrors;
+    });
+
+    // Clear general error when user starts typing
+    if (error) {
+      setError('');
+    }
   };
 
   const handlePayment = async () => {
@@ -53,17 +88,18 @@ const UnifiedPaymentModal: React.FC<UnifiedPaymentModalProps> = ({
       setIsProcessing(true);
       setError('');
 
-      // Validate required fields
-      const validation = paymentService.validatePaymentData({
-        item_id: item.id,
-        item_type: itemType,
-        email: formData.email,
-        user_name: formData.user_name,
-        additional_data: formData
-      });
+      // Validate required fields using comprehensive validation service
+      const validationContext: PaymentValidationContext = {
+        item,
+        itemType,
+        formData,
+        user
+      };
+
+      const validation = ValidationUtils.validatePaymentContext(validationContext);
 
       if (!validation.isValid) {
-        setError(validation.errors.join(', '));
+        setError(validation.message || 'Please check your input and try again.');
         return;
       }
 
@@ -96,48 +132,15 @@ const UnifiedPaymentModal: React.FC<UnifiedPaymentModalProps> = ({
             onSuccess(successData);
             onClose();
           } catch (err) {
-            console.error('Payment success handling failed:', err);
+            // Use centralized error handling service
+            const processedError = ErrorUtils.handlePaymentError(err, 'Payment Success Processing');
             setError('Payment was successful but there was an error processing it. Please contact support.');
           }
         },
         (error: any) => {
-          console.error('Payment failed:', error);
-          
-          // Extract meaningful error message
-          let userFriendlyMessage = 'Payment failed. Please try again.';
-          
-          if (error) {
-            // Handle Razorpay specific errors
-            if (error.description) {
-              userFriendlyMessage = `Payment failed: ${error.description}`;
-            } else if (error.message) {
-              // Handle general errors
-              if (error.message.includes('cancelled')) {
-                userFriendlyMessage = 'Payment was cancelled. You can try again.';
-              } else if (error.message.includes('network') || error.message.includes('connection')) {
-                userFriendlyMessage = 'Network error. Please check your connection and try again.';
-              } else if (error.message.includes('timeout')) {
-                userFriendlyMessage = 'Payment timed out. Please try again.';
-              } else {
-                userFriendlyMessage = `Payment failed: ${error.message}`;
-              }
-            }
-            
-            // Log detailed error for debugging
-            console.error('Detailed payment error:', {
-              message: error.message,
-              code: error.code,
-              description: error.description,
-              source: error.source,
-              step: error.step,
-              reason: error.reason,
-              metadata: error.metadata,
-              details: error.details,
-              originalError: error.originalError
-            });
-          }
-          
-          setError(userFriendlyMessage);
+          // Use centralized error handling service
+          const processedError = ErrorUtils.handlePaymentError(error, 'Payment Checkout');
+          setError(processedError.userMessage);
           onError?.(error);
         },
         {
@@ -147,40 +150,9 @@ const UnifiedPaymentModal: React.FC<UnifiedPaymentModalProps> = ({
         }
       );
     } catch (err: any) {
-      console.error('Payment initiation failed:', err);
-      
-      // Extract meaningful error message for user
-      let userErrorMessage = 'Failed to initiate payment. Please try again.';
-      
-      if (err) {
-        // Handle API response errors
-        if (err.response?.data?.error) {
-          userErrorMessage = err.response.data.error;
-        } else if (err.response?.data?.message) {
-          userErrorMessage = err.response.data.message;
-        } else if (err.message) {
-          // Handle network and other errors
-          if (err.message.includes('Network Error') || err.message.includes('fetch')) {
-            userErrorMessage = 'Network error. Please check your connection and try again.';
-          } else if (err.message.includes('timeout')) {
-            userErrorMessage = 'Request timed out. Please try again.';
-          } else {
-            userErrorMessage = `Error: ${err.message}`;
-          }
-        }
-        
-        // Log detailed error for debugging
-        console.error('Detailed payment initiation error:', {
-          message: err.message,
-          response: err.response,
-          status: err.response?.status,
-          statusText: err.response?.statusText,
-          data: err.response?.data,
-          stack: err.stack
-        });
-      }
-      
-      setError(userErrorMessage);
+      // Use centralized error handling service
+      const processedError = ErrorUtils.handlePaymentError(err, 'Payment Initiation');
+      setError(processedError.userMessage);
       onError?.(err);
     } finally {
       setIsProcessing(false);
@@ -192,8 +164,29 @@ const UnifiedPaymentModal: React.FC<UnifiedPaymentModalProps> = ({
   const itemTitle = item.title || item.name || 'Item';
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <ErrorBoundary
+      fallback={
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Error</h2>
+              <p className="text-gray-600 mb-6">
+                There was an error loading the payment form. Please try again.
+              </p>
+              <button
+                onClick={onClose}
+                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <AnimatePresence>
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -411,6 +404,7 @@ const UnifiedPaymentModal: React.FC<UnifiedPaymentModalProps> = ({
         </motion.div>
       </div>
     </AnimatePresence>
+    </ErrorBoundary>
   );
 };
 

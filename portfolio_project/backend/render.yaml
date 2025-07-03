@@ -1,26 +1,44 @@
-databases:
-  - name: portfolio-db
-    plan: free
-    databaseName: portfolio
-    user: portfolio
-
 services:
   - type: web
-    plan: free
     name: amardeep-portfolio-backend
-    runtime: python
-    buildCommand: './build.sh'
-    startCommand: 'python -m gunicorn backend.wsgi:application'
+    env: python
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py migrate
+    startCommand: |
+      python manage.py runserver 0.0.0.0:$PORT
     envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: backend.settings
+      - key: DEBUG
+        value: false
+      - key: ALLOWED_HOSTS
+        value: .onrender.com,localhost,127.0.0.1
+      - key: SECRET_KEY
+        generateValue: true
       - key: DATABASE_URL
         fromDatabase:
           name: portfolio-db
           property: connectionString
-      - key: SECRET_KEY
-        generateValue: true
-      - key: WEB_CONCURRENCY
-        value: 4
-      - key: DEBUG
-        value: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
       - key: FRONTEND_URL
-        value: https://your-frontend-domain.com
+        value: https://amardeep-portfolio-frontend.vercel.app
+    healthCheckPath: /api/health/
+
+databases:
+  - name: portfolio-db
+    plan: free

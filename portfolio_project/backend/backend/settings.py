@@ -221,5 +221,8 @@ PAYMENT_FAILURE_URL = f'{FRONTEND_URL}/payment/failure'
 
 # Production settings for Render deployment
 import os
-if 'RENDER' in os.environ:
-    from .settings_production import *
+if 'RENDER' in os.environ or not DEBUG:
+    try:
+        from .settings_production import *
+    except ImportError:
+        pass
