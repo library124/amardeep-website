@@ -1,0 +1,13 @@
+Access Details
+
+Dear Customer,
+
+You now have access to: {{ item_name }}
+
+Access Instructions:
+{{ access_instructions }}
+
+If you have any questions or need assistance, please don't hesitate to contact us.
+
+Best regards,
+The Team

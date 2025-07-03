@@ -1,52 +1,44 @@
-
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (
-    UserRegistrationView,
-    UserLoginView,
-    AchievementListCreateView,
-    AchievementDetailView,
-    DigitalProductListView,
-    DigitalProductDetailView,
-    SubscribeNewsletterView,
-    ConfirmSubscriptionView,
-    UnsubscribeView,
-    NewsletterListView,
-    BlogPostListView,
-    BlogPostDetailView,
-    BlogCategoryListView,
-    BlogTagListView,
-    FeaturedBlogPostsView,
-    WorkshopListView,
-    WorkshopDetailView,
-    FeaturedWorkshopsView,
-    UpcomingWorkshopsView,
-    ActiveWorkshopsView,
-    # Trading Service Views
-    TradingServiceListView,
-    TradingServiceDetailView,
-    FeaturedServicesView,
-    ServiceBookingCreateView,
-    # Dashboard Views
-    UserDashboardView,
-    UserProfileUpdateView,
-    UserDetailUpdateView,
-    ChangePasswordView,
-    PurchasedCoursesView,
-    CourseAccessView,
-    # CRUD ViewSets
-    AchievementViewSet,
-    DigitalProductViewSet,
-    BlogCategoryViewSet,
-    BlogTagViewSet,
-    BlogPostViewSet,
-    WorkshopViewSet,
-    WorkshopApplicationViewSet,
-    PaymentViewSet,
-    NewsletterViewSet,
-    SubscriberViewSet,
-    TradingServiceViewSet,
-    ServiceBookingViewSet,
+
+# Import views from modular structure
+from .views.auth_views import (
+    UserRegistrationView, UserLoginView, UserProfileUpdateView,
+    UserDetailUpdateView, ChangePasswordView
+)
+from .views.course_views import (
+    CourseListView, CourseDetailView, FeaturedCoursesView, CourseViewSet
+)
+from .views.payment_views_razorpay import (
+    CreateCourseOrderView, CreateWorkshopOrderView, CreateServiceOrderView, PaymentSuccessView, PaymentWebhookView
+)
+from .views.test_payment import TestWorkshopOrderView, TestServiceOrderView
+from .views.blog_views import (
+    BlogPostListView, BlogPostDetailView, BlogCategoryListView,
+    BlogTagListView, FeaturedBlogPostsView, BlogCategoryViewSet,
+    BlogTagViewSet, BlogPostViewSet
+)
+from .views.workshop_views import (
+    WorkshopListView, WorkshopDetailView, FeaturedWorkshopsView,
+    UpcomingWorkshopsView, ActiveWorkshopsView, WorkshopViewSet,
+    WorkshopApplicationViewSet, PaymentViewSet
+)
+from .views.dashboard_views import (
+    UserDashboardView, PurchasedCoursesView, CourseAccessView
+)
+from .views.trading_service_views import (
+    TradingServiceListView, TradingServiceDetailView, FeaturedServicesView,
+    ServiceBookingCreateView, TradingServiceViewSet, ServiceBookingViewSet
+)
+from .views.contact_views import (
+    ContactMessageCreateView, ContactMessageViewSet
+)
+from .views.product_views import (
+    AchievementListCreateView, AchievementDetailView, DigitalProductListView,
+    DigitalProductDetailView, AchievementViewSet, DigitalProductViewSet
+)
+from .health_views import (
+    health_check, api_status, payment_status
 )
 
 # SQLAlchemy Views
@@ -73,14 +65,19 @@ router.register(r'crud/blog/posts', BlogPostViewSet)
 router.register(r'crud/workshops', WorkshopViewSet)
 router.register(r'crud/workshop-applications', WorkshopApplicationViewSet)
 router.register(r'crud/payments', PaymentViewSet)
-router.register(r'crud/newsletters', NewsletterViewSet)
-router.register(r'crud/subscribers', SubscriberViewSet)
 router.register(r'crud/services', TradingServiceViewSet)
 router.register(r'crud/service-bookings', ServiceBookingViewSet)
+router.register(r'crud/courses', CourseViewSet)
+router.register(r'crud/contact-messages', ContactMessageViewSet)
 
 urlpatterns = [
     # Include CRUD router URLs
     path('', include(router.urls)),
+    
+    # Health Check URLs
+    path('health/', health_check, name='health-check'),
+    path('status/', api_status, name='api-status'),
+    path('payment/status/', payment_status, name='payment-status'),
     
     # Authentication
     path('auth/register/', UserRegistrationView.as_view(), name='register'),
@@ -94,17 +91,32 @@ urlpatterns = [
     path('dashboard/courses/', PurchasedCoursesView.as_view(), name='purchased-courses'),
     path('dashboard/courses/<int:course_id>/access/', CourseAccessView.as_view(), name='course-access'),
     
+    # Course URLs
+    path('courses/', CourseListView.as_view(), name='course-list'),
+    path('courses/featured/', FeaturedCoursesView.as_view(), name='course-featured'),
+    path('courses/<slug:slug>/', CourseDetailView.as_view(), name='course-detail'),
+    
+    # Payment URLs (SOLID-compliant with service layer)
+    path('api/create-course-order/', CreateCourseOrderView.as_view(), name='create-course-order'),
+    path('api/create-workshop-order/', CreateWorkshopOrderView.as_view(), name='create-workshop-order'),
+    path('api/create-service-order/', CreateServiceOrderView.as_view(), name='create-service-order'),
+    path('api/payment-success/', PaymentSuccessView.as_view(), name='payment-success'),
+    
+    # Frontend-expected payment URLs (for frontend compatibility)
+    path('api/workshop-order/', CreateWorkshopOrderView.as_view(), name='workshop-order'),
+    path('api/service-order/', CreateServiceOrderView.as_view(), name='service-order'),
+    
+    # Legacy payment URLs (for backward compatibility)
+    path('api/create-order/', CreateCourseOrderView.as_view(), name='create-order'),
+    
+    # Contact URLs
+    path('contact/', ContactMessageCreateView.as_view(), name='contact-create'),
+    
     # Legacy endpoints (for backward compatibility)
     path('achievements/', AchievementListCreateView.as_view(), name='achievement-list-create'),
     path('achievements/<int:pk>/', AchievementDetailView.as_view(), name='achievement-detail'),
     path('products/', DigitalProductListView.as_view(), name='product-list'),
     path('products/<int:pk>/', DigitalProductDetailView.as_view(), name='product-detail'),
-    
-    # Newsletter
-    path('newsletter/subscribe/', SubscribeNewsletterView.as_view(), name='newsletter-subscribe'),
-    path('newsletter/confirm/<uuid:token>/', ConfirmSubscriptionView.as_view(), name='newsletter-confirm'),
-    path('newsletter/unsubscribe/<uuid:token>/', UnsubscribeView.as_view(), name='newsletter-unsubscribe'),
-    path('newsletters/', NewsletterListView.as_view(), name='newsletter-list'),
     
     # Blog URLs (legacy)
     path('blog/', BlogPostListView.as_view(), name='blog-list'),

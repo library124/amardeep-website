@@ -40,7 +40,6 @@ class UserProfile(models.Model):
     )
     
     # Subscription and preferences
-    newsletter_subscribed = models.BooleanField(default=False, help_text="Subscribed to newsletter")
     email_notifications = models.BooleanField(default=True, help_text="Receive email notifications")
     sms_notifications = models.BooleanField(default=False, help_text="Receive SMS notifications")
     
@@ -108,6 +107,7 @@ class PurchasedCourse(models.Model):
     # Related objects
     workshop_application = models.ForeignKey('WorkshopApplication', on_delete=models.SET_NULL, null=True, blank=True)
     trading_service = models.ForeignKey('TradingService', on_delete=models.SET_NULL, null=True, blank=True)
+    course = models.ForeignKey('Course', on_delete=models.SET_NULL, null=True, blank=True)
     
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -174,47 +174,6 @@ class DigitalProduct(models.Model):
     def __str__(self):
         return self.name
 
-class Subscriber(models.Model):
-    email = models.EmailField(unique=True)
-    name = models.CharField(max_length=100, blank=True)
-    confirmation_token = models.UUIDField(default=uuid.uuid4, editable=False)
-    is_confirmed = models.BooleanField(default=False)
-    subscribed_at = models.DateTimeField(auto_now_add=True)
-    confirmed_at = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ['-subscribed_at']
-
-    def __str__(self):
-        return f"{self.email} ({'Confirmed' if self.is_confirmed else 'Pending'})"
-
-    def confirm_subscription(self):
-        self.is_confirmed = True
-        self.confirmed_at = timezone.now()
-        self.save()
-
-class Newsletter(models.Model):
-    subject = models.CharField(max_length=255)
-    content_html = models.TextField(help_text="HTML content of the newsletter")
-    content_text = models.TextField(blank=True, help_text="Plain text version (optional)")
-    created_at = models.DateTimeField(auto_now_add=True)
-    sent_at = models.DateTimeField(null=True, blank=True)
-    is_sent = models.BooleanField(default=False)
-    sent_to_count = models.IntegerField(default=0)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        status = "Sent" if self.is_sent else "Draft"
-        return f"{self.subject} ({status})"
-
-    def mark_as_sent(self, count):
-        self.is_sent = True
-        self.sent_at = timezone.now()
-        self.sent_to_count = count
-        self.save()
 
 class BlogCategory(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -702,6 +661,130 @@ class ServiceBooking(models.Model):
     def __str__(self):
         return f"{self.name} - {self.service.name} ({self.get_status_display()})"
 
+class Course(models.Model):
+    """Model for courses that can be purchased"""
+    COURSE_TYPE_CHOICES = [
+        ('video', 'Video Course'),
+        ('live', 'Live Course'),
+        ('workshop', 'Workshop'),
+        ('mentorship', 'Mentorship'),
+        ('signals', 'Trading Signals'),
+    ]
+    
+    DIFFICULTY_CHOICES = [
+        ('beginner', 'Beginner'),
+        ('intermediate', 'Intermediate'),
+        ('advanced', 'Advanced'),
+        ('expert', 'Expert'),
+    ]
+
+    title = models.CharField(max_length=255, help_text="Course title")
+    slug = models.SlugField(max_length=255, unique=True, blank=True)
+    description = models.TextField(help_text="Detailed course description")
+    short_description = models.TextField(max_length=300, help_text="Brief description for cards/listings")
+    
+    # Media
+    featured_image = models.ImageField(upload_to='courses/images/', help_text="Course cover image")
+    preview_video = models.URLField(blank=True, help_text="Preview video URL")
+    
+    # Course Details
+    course_type = models.CharField(max_length=20, choices=COURSE_TYPE_CHOICES, default='video')
+    difficulty_level = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='beginner')
+    duration_hours = models.PositiveIntegerField(help_text="Course duration in hours")
+    lessons_count = models.PositiveIntegerField(default=0, help_text="Number of lessons")
+    
+    # Pricing
+    price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Course price")
+    original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Original price (for discounts)")
+    currency = models.CharField(max_length=3, default='INR')
+    
+    # Content and Requirements
+    what_you_learn = models.TextField(help_text="What students will learn")
+    requirements = models.TextField(blank=True, help_text="Prerequisites or requirements")
+    course_content = models.JSONField(default=list, help_text="Course modules and lessons")
+    
+    # Instructor and Status
+    instructor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='courses')
+    is_active = models.BooleanField(default=True, help_text="Show on website")
+    is_featured = models.BooleanField(default=False, help_text="Feature on homepage")
+    
+    # Enrollment
+    max_students = models.PositiveIntegerField(null=True, blank=True, help_text="Maximum number of students (null = unlimited)")
+    enrolled_count = models.PositiveIntegerField(default=0, help_text="Current number of enrollments")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # SEO
+    meta_title = models.CharField(max_length=60, blank=True, help_text="SEO title")
+    meta_description = models.CharField(max_length=160, blank=True, help_text="SEO description")
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['is_active']),
+            models.Index(fields=['is_featured']),
+            models.Index(fields=['course_type']),
+        ]
+
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.title)
+        if not self.meta_title:
+            self.meta_title = self.title[:60]
+        if not self.meta_description:
+            self.meta_description = self.short_description[:160]
+        super().save(*args, **kwargs)
+
+    def get_absolute_url(self):
+        return reverse('portfolio_app:course-detail', kwargs={'slug': self.slug})
+
+    @property
+    def price_display(self):
+        return f"{self.currency} {self.price:,.0f}"
+
+    @property
+    def original_price_display(self):
+        if self.original_price:
+            return f"{self.currency} {self.original_price:,.0f}"
+        return None
+
+    @property
+    def discount_percentage(self):
+        if self.original_price and self.original_price > self.price:
+            return int(((self.original_price - self.price) / self.original_price) * 100)
+        return 0
+
+    @property
+    def is_full(self):
+        if self.max_students:
+            return self.enrolled_count >= self.max_students
+        return False
+
+    @property
+    def spots_remaining(self):
+        if self.max_students:
+            return max(0, self.max_students - self.enrolled_count)
+        return None
+
+    def get_duration_display(self):
+        if self.duration_hours == 1:
+            return "1 hour"
+        elif self.duration_hours < 24:
+            return f"{self.duration_hours} hours"
+        else:
+            days = self.duration_hours // 24
+            remaining_hours = self.duration_hours % 24
+            if remaining_hours == 0:
+                return f"{days} day{'s' if days > 1 else ''}"
+            else:
+                return f"{days} day{'s' if days > 1 else ''} {remaining_hours} hour{'s' if remaining_hours > 1 else ''}"
+
 class Payment(models.Model):
     PAYMENT_STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -716,10 +799,12 @@ class Payment(models.Model):
         ('product', 'Digital Product'),
         ('subscription', 'Subscription'),
         ('service', 'Trading Service'),
+        ('course', 'Course'),
     ]
 
     # Payment details
     payment_id = models.CharField(max_length=100, unique=True, help_text="Unique payment identifier")
+    razorpay_order_id = models.CharField(max_length=100, blank=True, help_text="Razorpay order ID")
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3, default='INR')
     status = models.CharField(max_length=10, choices=PAYMENT_STATUS_CHOICES, default='pending')
@@ -739,6 +824,7 @@ class Payment(models.Model):
     workshop_application = models.ForeignKey(WorkshopApplication, on_delete=models.SET_NULL, null=True, blank=True)
     digital_product = models.ForeignKey(DigitalProduct, on_delete=models.SET_NULL, null=True, blank=True)
     trading_service = models.ForeignKey(TradingService, on_delete=models.SET_NULL, null=True, blank=True)
+    course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -752,6 +838,7 @@ class Payment(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['payment_type']),
             models.Index(fields=['customer_email']),
+            models.Index(fields=['razorpay_order_id']),
         ]
 
     def __str__(self):
@@ -770,6 +857,25 @@ class Payment(models.Model):
         # Update related application if exists
         if self.workshop_application:
             self.workshop_application.mark_payment_completed(gateway_payment_id, payment_method)
+        
+        # Create purchased course if course payment
+        if self.course:
+            PurchasedCourse.objects.create(
+                user_id=self.gateway_response.get('user_id') if self.gateway_response else None,
+                course_name=self.course.title,
+                course_type='course',
+                description=self.course.short_description,
+                purchase_date=timezone.now(),
+                start_date=timezone.now(),
+                amount_paid=self.amount,
+                currency=self.currency,
+                status='active',
+                course=self.course
+            )
+            
+            # Increment enrolled count
+            self.course.enrolled_count += 1
+            self.course.save(update_fields=['enrolled_count'])
 
 class ContactMessage(models.Model):
     STATUS_CHOICES = [

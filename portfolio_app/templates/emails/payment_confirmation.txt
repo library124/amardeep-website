@@ -1,0 +1,16 @@
+Payment Confirmation
+
+Dear {{ customer_name }},
+
+Your payment has been successfully processed!
+
+Payment Details:
+- Payment ID: {{ payment_id }}
+- Amount: {{ currency }} {{ amount }}
+- Item: {{ item_name }}
+- Type: {{ payment_type }}
+
+Thank you for your purchase! You will receive access details shortly.
+
+Best regards,
+The Team

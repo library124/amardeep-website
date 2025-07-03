@@ -1,10 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
-    Achievement, DigitalProduct, Subscriber, Newsletter, BlogPost, 
+    Achievement, DigitalProduct, BlogPost, 
     BlogCategory, BlogTag, Workshop, WorkshopApplication, Payment,
     TradingService, ServiceBooking, UserProfile, PurchasedCourse,
-    ContactMessage
+    ContactMessage, Course
 )
 from django.utils import timezone
 
@@ -38,21 +38,6 @@ class DigitalProductSerializer(serializers.ModelSerializer):
         model = DigitalProduct
         fields = '__all__'
 
-class SubscriberSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subscriber
-        fields = ['email', 'name']
-        
-    def validate_email(self, value):
-        if Subscriber.objects.filter(email=value, is_active=True).exists():
-            raise serializers.ValidationError("This email is already subscribed.")
-        return value
-
-class NewsletterSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Newsletter
-        fields = ['id', 'subject', 'content_html', 'created_at', 'is_sent', 'sent_to_count']
-        read_only_fields = ['created_at', 'is_sent', 'sent_to_count']
 
 class BlogCategorySerializer(serializers.ModelSerializer):
     post_count = serializers.SerializerMethodField()
@@ -236,23 +221,6 @@ class DigitalProductCreateUpdateSerializer(serializers.ModelSerializer):
         model = DigitalProduct
         fields = ['name', 'description', 'price', 'download_link']
 
-class NewsletterCreateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Newsletter
-        fields = ['subject', 'content_html', 'content_text']
-
-class SubscriberCreateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subscriber
-        fields = ['email', 'name', 'is_active']
-        
-    def validate_email(self, value):
-        # Allow updating existing subscriber
-        if self.instance and self.instance.email == value:
-            return value
-        if Subscriber.objects.filter(email=value, is_active=True).exists():
-            raise serializers.ValidationError("This email is already subscribed.")
-        return value
 
 class TradingServiceSerializer(serializers.ModelSerializer):
     price_display = serializers.ReadOnlyField()
@@ -304,7 +272,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = [
             'phone', 'date_of_birth', 'bio', 'profile_picture',
-            'trading_experience', 'preferred_market', 'newsletter_subscribed',
+            'trading_experience', 'preferred_market',
             'email_notifications', 'sms_notifications', 'full_name', 'display_name',
             'created_at', 'updated_at'
         ]
@@ -404,3 +372,44 @@ class ContactMessageUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContactMessage
         fields = ['status', 'priority', 'admin_notes', 'assigned_to']
+
+# Course Serializers
+class CourseSerializer(serializers.ModelSerializer):
+    instructor_name = serializers.CharField(source='instructor.get_full_name', read_only=True)
+    price_display = serializers.ReadOnlyField()
+    original_price_display = serializers.ReadOnlyField()
+    discount_percentage = serializers.ReadOnlyField()
+    duration_display = serializers.ReadOnlyField(source='get_duration_display')
+    is_full = serializers.ReadOnlyField()
+    spots_remaining = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Course
+        fields = [
+            'id', 'title', 'slug', 'short_description', 'description',
+            'featured_image', 'preview_video', 'course_type', 'difficulty_level',
+            'duration_hours', 'duration_display', 'lessons_count', 'price',
+            'original_price', 'currency', 'price_display', 'original_price_display',
+            'discount_percentage', 'what_you_learn', 'requirements', 'course_content',
+            'instructor_name', 'is_active', 'is_featured', 'max_students',
+            'enrolled_count', 'is_full', 'spots_remaining', 'created_at'
+        ]
+
+class CourseCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Course
+        fields = [
+            'title', 'slug', 'short_description', 'description', 'featured_image',
+            'preview_video', 'course_type', 'difficulty_level', 'duration_hours',
+            'lessons_count', 'price', 'original_price', 'currency', 'what_you_learn',
+            'requirements', 'course_content', 'is_active', 'is_featured',
+            'max_students', 'meta_title', 'meta_description'
+        ]
+        extra_kwargs = {
+            'slug': {'required': False}
+        }
+
+class CourseDetailSerializer(CourseSerializer):
+    """Extended course serializer with additional details for course detail page"""
+    class Meta(CourseSerializer.Meta):
+        fields = CourseSerializer.Meta.fields + ['meta_title', 'meta_description']
